@@ -7,6 +7,7 @@ from shapely.geometry import Point, MultiPolygon
 from shapely.geometry.polygon import Polygon
 from shapely.ops import cascaded_union
 import atexit
+import threading
 
 symphony = Bot(command_prefix = "!")
 server = "unnasigned"
@@ -14,8 +15,10 @@ pokemonList = {}
 moveList = {}
 geoDataDict = {}
 symphonyUsers = []
+exportedRecently = False
 
-#channels
+''' 
+#test channels
 input = discord.Object(id = '288563630645968896')
 northSeattle = discord.Object(id = '288537029514362880')
 centralSeattle = discord.Object(id = '288537058127904768')
@@ -27,7 +30,12 @@ all = discord.Object(id = '297541247378391042')
 dratini = discord.Object(id = '298239380857028611')
 larvitar = discord.Object(id = '298239647929204738')
 rares = discord.Object(id = '298240115812073472') #snorlax-chancey-lapras
+troubleshooting = discord.Object(id = '300686505066889216')
+'''
 
+input = discord.Object(id = '288563630645968896')
+all = discord.Object(id = '297541247378391042')
+support = discord.Object(id = '302183093140324352')
 
 class Spawn:
 	def __init__(self):
@@ -61,11 +69,14 @@ class Spawn:
 		self.region =  ""
 		
 	def calculatePercent(self):
-		self.ivTotal = self.individual_attack + self.individual_defense + self.individual_stamina
-		p = self.ivTotal / 45
-		p = p * 100
-		self.percent = round(p, 1)
-		
+		try:
+			self.ivTotal = self.individual_attack + self.individual_defense + self.individual_stamina
+			p = self.ivTotal / 45
+			p = p * 100
+			self.percent = round(p, 1)
+		except:
+			self.ivTotal = -1
+			print("IV Error at: " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S %p'))
 	def getNames(self):
 		self.pokemonName = pokemonList[str(self.pokemon_id)]["name"]
 		try:
@@ -103,43 +114,45 @@ class Spawn:
 		self.message.set_thumbnail(url="https://raw.githubusercontent.com/kvangent/PokeAlarm/master/icons/" + str(self.pokemon_id) +  ".png")
 
 class SymphonyUser:
-	def __init__(self, name_, id_, discriminator_, subscriptions_):
+	def __init__(self, name_, id_, discriminator_, subscriptions_, filters_, default_ = 0):
 		self.name = name_
 		self.id = id_
 		self.discriminator = discriminator_
 		self.subscriptions = subscriptions_
-		self.filters = {}
-		self.customerFilter = False
+		self.filters = filters_
+		self.default = default_
 
 def exit_handler():
 	f = open('onClose.txt', 'w')
-	f.write('Closing text here')
+	f.write("Closed at: " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S %p'))
 	f.close()
-	print("CLOSING DO STUFF HERE")
+	print("Exiting Program")
 
 	
 def exportUsers():
-	print("Exporting users")
-	userData = json.dumps([symphonyUser.__dict__ for symphonyUser in symphonyUsers])
+	global exportedRecently
+	
+	if exportedRecently == False:
+		print("Exporting users at " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S %p'))
+		userData = json.dumps([symphonyUser.__dict__ for symphonyUser in symphonyUsers])
 
-	f = open('users.json', 'w')
-	f.write(userData)
-	f.close()
+		f = open('users.json', 'w')
+		f.write(userData)
+		f.close()
+		
+		exportedRecently = True
+	
 	
 def importUsers():
 	global symphonyUsers
-	print("Importing Users")
+	print("Importing Users at " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S %p'))
 	with open("users.json", "r", encoding='utf-8') as data_file:   
 		userData = json.load(data_file)
-		print(userData)
 	
 	for symphonyUser in userData: 
-		print(symphonyUser["name"])
-		print(symphonyUser["id"])
-		print(symphonyUser["subscriptions"])
-		su = SymphonyUser(symphonyUser["name"], symphonyUser["id"], symphonyUser["discriminator"], symphonyUser["subscriptions"])
+		su = SymphonyUser(symphonyUser["name"], symphonyUser["id"], symphonyUser["discriminator"], symphonyUser["subscriptions"], symphonyUser["filters"], symphonyUser["default"])
 		symphonyUsers.append(su)
-	print("Users Imported")
+	print("Users Imported at " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S %p'))
 	
 def findNeighborhood(pointCoords):
 	point = Point(pointCoords)
@@ -242,6 +255,17 @@ def findSubcribedUsers(neighborhood):
 		if neighborhood in user.subscriptions: subscribedUsers.append(user)
 	#print(len(subscribedUsers))
 	return subscribedUsers
+
+def checkSubscribedUserFilters(subList, pokemonName, percent):
+	subs = subList
+	for sub in subs:
+		#print(pokemonName in sub.filters)
+		#print(sub.filters[pokemonName])
+		#print(percent)
+		#print ((pokemonName in sub.filters and float(sub.filters[pokemonName]) <= percent))
+		if (pokemonName in sub.filters and float(sub.filters[pokemonName]) > percent):
+			subs.pop(sub)
+	return subs	
 	
 def isNeighborhoodInternal(neighborhood):
 	neighborhood = neighborhood.strip()
@@ -249,6 +273,8 @@ def isNeighborhoodInternal(neighborhood):
 
 def subscribeLogic(ctx):
 	message = ctx.message
+	if (message.content.strip() == "!sub" or message.content.strip() == "!subscribe"): 
+		return  "What neighborhood would you like to subscribe to? ie: `!sub capitol hill`"
 	messageSanitized = message.content.replace("!subscribe ", "")
 	messageSanitized = messageSanitized.replace("!sub ", "")
 	areas = messageSanitized.split(',')
@@ -267,7 +293,7 @@ def subscribeLogic(ctx):
 			break
 	
 	if curUser == None:
-		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [])
+		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [], {})
 		symphonyUsers.append(curUser)
 	
 	# ensure all inputs are actually neighborhoods
@@ -294,6 +320,9 @@ def subscribeLogic(ctx):
 
 def unsubscribeLogic(ctx):	
 	message = ctx.message
+	
+	if (message.content.strip() == "!unsub" or message.content.strip() == "!unsubscribe"): return  "What neighborhood would you like me to remove from your `!sub list`"
+	
 	messageSanitized = message.content.replace("!unsubscribe ", "")
 	messageSanitized = messageSanitized.replace("!unsub ", "")
 	areas = messageSanitized.split(',')
@@ -318,7 +347,8 @@ def unsubscribeLogic(ctx):
 	else:
 		for area in areas:
 			area = area.strip()
-			if area.lower() in geoDataDict:
+			area = area.lower()
+			if area in geoDataDict:
 				if area in curUser.subscriptions:
 					curUser.subscriptions.remove(area)
 					unsubbed.append(area)	
@@ -337,9 +367,17 @@ def unsubscribeLogic(ctx):
 def getSubscriptions(ctx):
 	outputMessage = "No subscriptions"
 	for user in symphonyUsers:
-		if user.name == ctx.message.author.name:
+		if user.id == ctx.message.author.id:
 			outputMessage = ", ".join(user.subscriptions).title()
 	return outputMessage
+
+def greeting(ctx):
+	return ctx.message.author.mention + ", "
+
+def exportTimer():
+	global exportedRecently
+	threading.Timer(60.0, exportTimer).start()
+	exportedRecently = False
 	
 @symphony.event
 async def on_ready():
@@ -347,66 +385,74 @@ async def on_ready():
 	print("Client logged in")
 	server = symphony.get_server('288536871330512896')
 	
-'''
-@symphony.command()
+@symphony.command(enabled = False, hidden = True)
 async def pokemon(number):
 	await symphony.say(pokemonList[number]["name"])
 
-@symphony.command()
+@symphony.command(enabled = False, hidden = True)
 async def move(number):
 	await symphony.say(moveList[number]["name"])
-'''
-	
 
-@symphony.command(pass_context = True, description = "Ex: !subscribe Northgate, River Trail")
-async def subscribe(ctx):
-	'''Subscribe for neighborhood alerts'''
-	outputMessage = subscribeLogic(ctx)
-	await symphony.say(outputMessage)
-
-@symphony.command(pass_context = True, description = "Ex: !sub Northgate, River Trail")
+@symphony.group(pass_context = True, description = "Ex: !sub Northgate, River Trail", aliases = ["subscribe"])
 async def sub(ctx):
-	'''Subscribe alt command'''
-	outputMessage = subscribeLogic(ctx)
-	await symphony.say(outputMessage)	
+	'''Subscribe for neighborhood alerts'''
+	if ctx.invoked_subcommand is None:
+		outputMessage = greeting(ctx) + subscribeLogic(ctx)
+		await symphony.say(outputMessage)		
 
-@symphony.command(pass_context = True, description = "Ex: !Unsubscribe Northgate, Lake City")
-async def unsubscribe(ctx):
-	'''Unsubscribe from particular neighborhood alerts'''
-	outputMessage = unsubscribeLogic(ctx)
-	await symphony.say(outputMessage)	
-	
-@symphony.command(pass_context = True, description = "Ex: !Unsub Northgate, Lake City")
-async def unsub(ctx):
-	'''Unsubscribe alt command'''
-	outputMessage = unsubscribeLogic(ctx)
-	await symphony.say(outputMessage)	
-
-@symphony.command(pass_context = True)
-async def subscriptions(ctx):
+@sub.command(pass_context = True, description = "Ex: !filter add Squirtle:90, Bulbasaur:95, Charmander:100")
+async def list(ctx):
 	'''List your subscriped neighborhoods'''
-	outputMessage = getSubscriptions(ctx)
+	outputMessage = greeting(ctx) + "Your subscriptions are: " + getSubscriptions(ctx)
+	await symphony.say(outputMessage)
+
+@symphony.command(pass_context = True, description = "Ex: !Unsub Northgate, Lake City", aliases = ["unsubscribe"])
+async def unsub(ctx):
+	'''Unsubscribe from particular neighborhood alerts'''
+	outputMessage = greeting(ctx) + unsubscribeLogic(ctx)
 	await symphony.say(outputMessage)	
 
-@symphony.command(pass_context = True)
+@symphony.command(pass_context = True, aliases = ["subscriptions"])
 async def subs(ctx):
-	'''Subscriptions alt command'''
-	outputMessage = getSubscriptions(ctx)
+	'''List your subscriped neighborhoods'''
+	outputMessage = greeting(ctx) + getSubscriptions(ctx)
 	await symphony.say(outputMessage)
 	
-@symphony.command()
-async def isArea(*, message: str):
-	'''Internal command, checks if a string is a valid neighborhood name'''
-	await symphony.say(isNeighborhoodInternal(message))
+@symphony.command(pass_context = True, description = "Ex: !isLoc Ballard", aliases = ["isloc"])
+async def isLoc(ctx):
+	'''Checks if a string is a valid neighborhood name'''
+	if (ctx.message.content.lower() == "!isloc"):
+		outputMessage = greeting(ctx) + "Provide a neighborhood name to see if it exists, ie: `!isLoc Ballard`"
+		await symphony.say(outputMessage)
+		return
+	
+	locationName = ctx.message.content.replace("!isLoc ", "")
+	locationName = locationName.replace("!isloc ", "")
+	if (isNeighborhoodInternal(locationName) == True):
+		exists  = "does"
+	else: exists = "doesn't"
+	
+	outputMessage  = "that location " + exists + " exist."
+	outputMessage = greeting(ctx) + outputMessage
+	await symphony.say(outputMessage)
 
-@symphony.command()
-async def areaList(letter: str):
-	'''Internal command, lists neighborhoods starting with a specific character'''
+@symphony.command(pass_context = True, description = "Ex: !areaList B", aliases = ["arealist"])
+async def areaList(ctx):
+	'''Find neighborhoods starting with a specific letter'''
+	input = ctx.message.content.strip()
+	
+	if (input.lower() == "!arealist" or len(input) > 11): 
+		await symphony.say(greeting(ctx) + "To use this command provide a single letter, ie. `!areaList B`")
+		return
+	
 	outputMessage = ""
 	areas = []
 	
+	
+	letter = input.replace("!areaList ", "")
+	letter = letter.lower()
 	for area in geoDataDict:
-		if area[0] == letter.lower(): 
+		if area[0] == letter: 
 			areas.append(area)
 	
 	if len(areas) == 0: outputMessage = "No neighborhoods found that start with " + letter + "."
@@ -415,9 +461,10 @@ async def areaList(letter: str):
 		outputMessage = "Neighborhoods that start with " + letter + ": "
 		outputMessage = outputMessage + ", ".join(areas).title()
 		
+	outputMessage = greeting(ctx) + outputMessage
 	await symphony.say(outputMessage)
 
-@symphony.command()
+@symphony.command(hidden = True)
 async def users():
 	'''Internal command, shows how many current users there are and lists their names'''
 	msg = "Current users: " + str(len(symphonyUsers))
@@ -427,30 +474,249 @@ async def users():
 	
 	await symphony.say(msg)
 
-@symphony.command(description = "Ex: !userSubs Trapsin")
+@symphony.command(description = "Ex: !userSubs Trapsin", enabled = False, hidden = True)
 async def userSubs(userName: str):
 	'''Internal command, shows a user's subs'''
+	if (len(userName) == 0):
+		await symphony.say(self.description)
+		return
+	
 	for user in symphonyUsers:
 		if user.name == userName:
 			msg = " ".join(user.subscriptions)
+		break
+		
 	await symphony.say(msg)
 
-@symphony.group(pass_context=True)
+@symphony.command(description = "Ex: !userFilters Trapsin", enabled = False, hidden = True)
+async def userFilters(userName: str):
+	'''Internal command, shows a user's filters'''
+	msg = ""
+	for user in symphonyUsers:
+		if user.name == userName:
+			for k, v in user.filters.items():
+				msg = msg + k + ":" + str(v) + " "
+			break
+	if len(msg) == 0: msg = "No filters found."
+	await symphony.say(msg)
+	
+@symphony.group(pass_context = True)
 async def filter(ctx):
-    if ctx.invoked_subcommand is None:
-        await symphony.say('Invalid filter command passed...')
+	'''Manage custom filters for your subscriptions'''
+	if ctx.invoked_subcommand is None:
+		outputMessage = greeting(ctx) + '''this command has multiple uses:
+		`!filter add POKEMON:IV`» Add a Pokémon to your `!filter list`
+		`!filter remove POKEMON`»  Remove a Pokémon from your `!filter list`
+		`!filter list`» View your currently active filter list.'''
+		await symphony.say(outputMessage)	
 
-@filter.command()
-async def add():
-    await symphony.say("Adding pokemon")	
+@filter.command(pass_context = True, description = "Ex: !filter add Squirtle:90, Bulbasaur:95, Charmander:100")
+async def add(ctx):
+	'''Add a filter'''
+	message = ctx.message
+	
+	# provide help if no parameters given
+	if (message.content.strip() == "!filter add"):
+		outputMessage = greeting(ctx) + "What Pokémon would you like me to add to your `!filter list`"
+		await symphony.say(outputMessage)
+		return
+	
+	if (':' in message.content) == False:
+		outputMessage = greeting(ctx) + "To add to your `!filter list` use the format `!filter add POKEMON:IV`"
+	
+	messageSanitized = message.content.replace("!filter add ", "")
+	filters = messageSanitized.split(',')
+	
+	notFound = []
+	changed = []
+	added = []
+	curUser = None
+	
+	# assign curUser to existing or new user
+	for u in symphonyUsers:
+		if u.id == message.author.id:
+			curUser = u
+			break
+	
+	if curUser == None:
+		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [], {})
+		symphonyUsers.append(curUser)
+	
+	# ensure all inputs are actually pokemon
+	for filter in filters:
+		try:
+			pokemon, ivValue = filter.split(":")
+			try:
+				print("Printing")
+				print(ivValue)
+				ivValue = int(ivValue)
+			except:
+				await symphony.say(greeting(ctx) + "IV Value must be a number, ie: !filter add Squirtle:95")
+				return
+		except:
+			pokemon = filter
+		pokemon = pokemon.strip()
+		pokemon = pokemon.title()
+		
+		found = False
+		for pokemonNumber, pokemonData in pokemonList.items():
+			if pokemonData["name"] == pokemon:
+				if pokemon in curUser.filters:
+					changed.append(filter)
+				else:
+					added.append(filter)
+				
+				found = True
+				curUser.filters[pokemon] = ivValue
+				break
+				
+		if found == False: notFound.append(pokemon)
+	
+	outputMessage = ""
+	if len(added) > 0: outputMessage = outputMessage + "Added filters for: " + ", ".join(added).title() + "\n"
+	if len(changed) > 0: outputMessage = outputMessage + "Filters updated for: " + ", ".join(changed).title() + "\n"
+	if len(notFound) > 0: outputMessage = outputMessage + "Could not find a pokemon for: " + ", ".join(notFound).title() + "\n"
+	
+	exportUsers()
+	outputMessage = greeting(ctx) + outputMessage
+	await symphony.say(outputMessage)	
 
-@filter.command()
-async def remove():
-    await symphony.say("Removing pokemon")
+@filter.command(pass_context = True, description = "Ex: !filter remove Squirtle, Bulbasaur")
+async def remove(ctx):
+	'''Remove a filter'''
+	message = ctx.message
+	
+	# provide help if no parameters given
+	if (message.content.strip() == "!filter remove"):
+		outputMessage = greeting(ctx) + "What Pokémon would you like me to remove from your `!filter list`"
+		await symphony.say(outputMessage)
+		return
+		
+	messageSanitized = message.content.replace("!filter remove ", "")
+	filters = messageSanitized.split(',')
+	
+	print(filters)
+	
+	notFound = []
+	noFilter = []
+	removed = []
+	curUser = None
+	
+	# assign curUser to existing or new user
+	for u in symphonyUsers:
+		if u.id == message.author.id:
+			curUser = u
+			break
+	
+	if curUser == None:
+		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [], {})
+		symphonyUsers.append(curUser)
+	
+	# ensure all inputs are actually pokemon
+	for pokemon in filters:
+		pokemon = pokemon.strip()
+		pokemon = pokemon.title()
 
-@filter.command()
-async def list():
-    await symphony.say("Listing pokemon")		
+		found = False
+		for pokemonNumber, pokemonData in pokemonList.items():
+			if pokemonData["name"] == pokemon:
+				if pokemon in curUser.filters:
+					removed.append(pokemon)
+					curUser.filters.pop(pokemon)
+				else:
+					noFilter.append(pokemon)
+				
+				found = True
+				break
+		
+		if found == False: notFound.append(pokemon)
+	
+	outputMessage = ""
+	if len(removed) > 0: outputMessage = outputMessage + "Removed filters for: " + ", ".join(removed).title() + "\n"
+	if len(noFilter) > 0: outputMessage = outputMessage + "No filter exists for: " + ", ".join(noFilter).title() + "\n"
+	if len(notFound) > 0: outputMessage = outputMessage + "Could not find a pokemon for: " + ", ".join(notFound).title() + "\n"
+	
+	exportUsers()
+	
+	outputMessage = greeting(ctx) + outputMessage
+	await symphony.say(outputMessage)	
+	
+@filter.command(pass_context = True, description = "Ex: !filter block Wartortle, Exeggcute")
+async def block(ctx):
+	'''Block a Pokémon from showing in your subscriptions'''
+	message = ctx.message
+	
+	# provide help if no parameters given
+	if (message.content.strip() == "!block"): 
+		outputMessage = greeting(ctx) + "What Pokémon would you like me to block from your `!filter list`"
+		await symphony.say(outputMessage)
+		return
+	
+	messageSanitized = message.content.replace("!filter block ", "")
+	filters = messageSanitized.split(',')
+	
+	#print(filters)
+	
+	notFound = []
+	changed = []
+	added = []
+	curUser = None
+	
+	# assign curUser to existing or new user
+	for u in symphonyUsers:
+		if u.id == message.author.id:
+			curUser = u
+			break
+	
+	if curUser == None:
+		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [], {})
+		symphonyUsers.append(curUser)
+	
+	# ensure all inputs are actually pokemon
+	for pokemon in filters:
+		pokemon = pokemon.strip()
+		pokemon = pokemon.title()
+		
+		found = False
+		for pokemonNumber, pokemonData in pokemonList.items():
+			if pokemonData["name"] == pokemon:
+				if pokemon in curUser.filters:
+					changed.append(pokemon)
+				else:
+					added.append(pokemon)
+					
+				found = True
+				curUser.filters[pokemon] = "101"
+				break
+		if found == False: notFound.append(pokemon)
+	
+	outputMessage = ""
+	if len(added) > 0: outputMessage = outputMessage + "Added blocks for : " + ", ".join(added).title() + "\n"
+	if len(changed) > 0: outputMessage = outputMessage + "Filters updated for: " + ", ".join(changed).title() + "\n"
+	if len(notFound) > 0: outputMessage = outputMessage + "Could not find a pokemon for: " + ", ".join(notFound).title() + "\n"
+	
+	exportUsers()
+
+	outputMessage = greeting(ctx) + outputMessage
+	await symphony.say(outputMessage)	
+
+@filter.command(pass_context = True)
+async def list(ctx):
+	'''List your custom filters'''
+	outputMessage = ""
+	for user in symphonyUsers:
+		if user.id == ctx.message.author.id:
+			outputMessage = ""
+			for k, v in user.filters.items():
+				outputMessage = outputMessage + k + ":" + str(v) + ", "
+			break
+	if len(outputMessage) == 0: outputMessage = "No filters found."
+	
+	outputMessage = outputMessage.replace("101", "Blocked")
+	outputMessage = outputMessage.strip(', ')
+	outputMessage = greeting(ctx) + "Your filter list is: " + outputMessage
+	await symphony.say(outputMessage)
+			
 	
 @symphony.event
 async def on_message(message):
@@ -458,10 +724,23 @@ async def on_message(message):
 	if message.author == symphony.user:
 		return
 	
+	# only accept spawn input from the input channel
 	if message.channel.id == input.id:
 		s = readInput(message.content)
-		#msg = message.channel
+		
+		# if IV Error send input and output to troubleshooting channel and no where else
+		if s.ivTotal == -1:
+			await symphony.send_message(troubleshooting, message)
+			await symphony.send_message(troubleshooting, embed = s.message)
+			return
+		
+		# send to 'all' channel
 		await symphony.send_message(all, embed = s.message)
+		
+		# log neighborhood not found to troubleshooting channel
+		if (s.locationName == "Neighborhood not found"):
+			await symphony.send_message(troubleshooting, message.content)
+			await symphony.send_message(troubleshooting, embed = s.message)
 		
 		# special cases
 		# 100 iv
@@ -483,18 +762,22 @@ async def on_message(message):
 		#if len(subs) > 0:
 			#for sub in subs:
 				#print(sub.name)
-
+		
+		subs = checkSubscribedUserFilters(subs, s.pokemonName, s.percent)
+		
 		for sub in subs:
 			sendToUser = server.get_member(sub.id)
 			await symphony.send_message(sendToUser, embed = s.message)
 			
 	else: 
-		await symphony.process_commands(message)
+		if message.channel.id == support.id:
+			await symphony.process_commands(message)
 		
 
 pokemonList = loadPokemon()
 moveList = loadMoves()	
 loadGeoData()
 importUsers()
+exportTimer()
 symphony.run("Mjg4NTYwMTI5MTAyNzA4NzM3.C5_mKg.G3lfXpkqnvr8ocJxnfKJ7YPO3pE")
 atexit.register(exit_handler)
