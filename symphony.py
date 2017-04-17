@@ -1,5 +1,6 @@
 import discord
 from discord.ext.commands import Bot
+import discord.ext.commands
 import json
 import sys
 import datetime
@@ -16,6 +17,10 @@ moveList = {}
 geoDataDict = {}
 symphonyUsers = []
 exportedRecently = False
+logFile = "log.txt"
+messagesPerMinute = 0
+inputPerMinute = 0
+commandsPerMinute = 0
 
 ''' 
 #test channels
@@ -33,9 +38,28 @@ rares = discord.Object(id = '298240115812073472') #snorlax-chancey-lapras
 troubleshooting = discord.Object(id = '300686505066889216')
 '''
 
-input = discord.Object(id = '288563630645968896')
-all = discord.Object(id = '297541247378391042')
 support = discord.Object(id = '302183093140324352')
+
+input = discord.Object(id = '288563630645968896')
+troubleshooting = discord.Object(id = '300686505066889216')
+
+all = discord.Object(id = '297541247378391042')
+
+perfectIV = discord.Object(id = '288537263627829248')
+dratini = discord.Object(id = '292196045717241857')
+larvitar = discord.Object(id = '292196235673337856')
+rares = discord.Object(id = '294107396442292224') #snorlax-chancey-lapras
+testSupport = discord.Object(id = '288537462207283201')
+perfectIV = discord.Object(id = '292195941279072276')
+lapras = discord.Object(id = '292195992881594371')
+snorlax = discord.Object(id = '292196012511068160')
+chansey = discord.Object(id = '292196119432134657')
+grimer = discord.Object(id = '295375572639416321')
+hitmonchanLeeTop = discord.Object(id = '295400320484245504')
+mareep = discord.Object(id = '292196086456516610')
+unown = discord.Object(id = '292195967191613440')
+
+
 
 class Spawn:
 	def __init__(self):
@@ -74,16 +98,22 @@ class Spawn:
 			p = self.ivTotal / 45
 			p = p * 100
 			self.percent = round(p, 1)
-		except:
+			log("Percent calculated as " + str(self.percent))
+		except BaseException as e:
 			self.ivTotal = -1
-			print("IV Error at: " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S %p'))
+			log("IV Error" + str(e))
+			
 	def getNames(self):
 		self.pokemonName = pokemonList[str(self.pokemon_id)]["name"]
 		try:
 			self.move1Name = moveList[str(self.move_1)]["name"]
+		except:
+			self.move1Name = "Move not found"
+			log("Error retreiving move name")
+		try:
 			self.move2Name = moveList[str(self.move_2)]["name"]
 		except:
-			print("Error retreiving move name at: " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S %p'))
+			self.move2Name = "Move not found"
 		
 		if self.gender == 1: self.gender = '♀'
 		else: self.gender = '♂'
@@ -123,17 +153,27 @@ class SymphonyUser:
 		self.default = default_
 
 def exit_handler():
-	f = open('onClose.txt', 'w')
-	f.write("Closed at: " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S %p'))
+	f = open('runLog.txt', 'a')
+	msg = "Closing Symphony"
+	f.write(msg)
 	f.close()
-	print("Exiting Program")
+	exportUsers()
+	log(msg)
 
+def log(message):
+	msg = message + " at " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S %p')
+	print(msg)
+		
+	f = open(logFile, 'a')
+	print(msg, file = f)
+	f.close()
 	
 def exportUsers():
 	global exportedRecently
 	
 	if exportedRecently == False:
-		print("Exporting users at " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S %p'))
+		log("Exporting users")
+
 		userData = json.dumps([symphonyUser.__dict__ for symphonyUser in symphonyUsers])
 
 		f = open('users.json', 'w')
@@ -141,25 +181,27 @@ def exportUsers():
 		f.close()
 		
 		exportedRecently = True
-	
-	
+		
 def importUsers():
 	global symphonyUsers
-	print("Importing Users at " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S %p'))
+	
+	log("Importing Users")
+	
 	with open("users.json", "r", encoding='utf-8') as data_file:   
 		userData = json.load(data_file)
 	
 	for symphonyUser in userData: 
 		su = SymphonyUser(symphonyUser["name"], symphonyUser["id"], symphonyUser["discriminator"], symphonyUser["subscriptions"], symphonyUser["filters"], symphonyUser["default"])
 		symphonyUsers.append(su)
-	print("Users Imported at " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S %p'))
+		
+	log("Users Imported")
 	
 def findNeighborhood(pointCoords):
 	point = Point(pointCoords)
 	for label, shape in geoDataDict.items():
 		if (shape.contains(point)):
 			return label
-	print("Neighborhood not found at: " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S %p'))
+	log("Neighborhood not found")
 	return "Neighborhood not found"
 		
 def loadPokemon():
@@ -249,22 +291,32 @@ def readInput(spawnData):
 def findSubcribedUsers(neighborhood):
 	subscribedUsers = []
 	for user in symphonyUsers:
-		#print(user.name)
-		#print(user.subscriptions)
-		#print(neighborhood in user.subscriptions)
 		if neighborhood in user.subscriptions: subscribedUsers.append(user)
-	#print(len(subscribedUsers))
 	return subscribedUsers
 
 def checkSubscribedUserFilters(subList, pokemonName, percent):
+	log("FILTERING FOR " + pokemonName + " " + str(percent))
 	subs = subList
+
 	for sub in subs:
-		#print(pokemonName in sub.filters)
-		#print(sub.filters[pokemonName])
-		#print(percent)
-		#print ((pokemonName in sub.filters and float(sub.filters[pokemonName]) <= percent))
+		try: log(sub.name)
+		except: log(sub.id)
+
+		if (pokemonName in sub.filters): 
+			try: log("\t" + sub.name + " - " + str(sub.filters[pokemonName]))
+			except: log("\t" + sub.id + " - " + str(sub.filters[pokemonName]))
+
 		if (pokemonName in sub.filters and float(sub.filters[pokemonName]) > percent):
-			subs.pop(sub)
+			try:
+				subs.remove(sub)
+			except BaseException as e:
+				try:
+					log("Error removing sub from DM list: " + sub.name)
+				except:
+					log("Error removing sub from DM list: " + sub.id)
+				log("\t" + pokemonName + " - " + str(percent))
+				log("\t" + str(e))
+	
 	return subs	
 	
 def isNeighborhoodInternal(neighborhood):
@@ -365,10 +417,12 @@ def unsubscribeLogic(ctx):
 	return outputMessage
 
 def getSubscriptions(ctx):
-	outputMessage = "No subscriptions"
+	outputMessage = "You're not subscribed to any locations."
 	for user in symphonyUsers:
 		if user.id == ctx.message.author.id:
-			outputMessage = ", ".join(user.subscriptions).title()
+			if len(user.subscriptions) > 0:
+				outputMessage = ", ".join(user.subscriptions).title()
+			break
 	return outputMessage
 
 def greeting(ctx):
@@ -379,15 +433,44 @@ def exportTimer():
 	threading.Timer(60.0, exportTimer).start()
 	exportedRecently = False
 	
+def actionsPerMinuteTimer():
+	global messagesPerMinute
+	global inputPerMinute
+	global commandsPerMinute
+	
+	threading.Timer(60.0, actionsPerMinuteTimer).start()
+	log("MPM: " + str(messagesPerMinute) + "\tIPM: " + str(inputPerMinute) + "\tCPM: " + str(commandsPerMinute))
+	
+	messagesPerMinute = 0
+	inputPerMinute = 0
+	commandsPerMinute = 0
+	
+
+def splitMessageInto2kChunks(msg):
+	return (msg[i : i + 2000] for i in range(0, len(msg), 2000))
+	
 @symphony.event
 async def on_ready():
 	global server
-	print("Client logged in")
-	server = symphony.get_server('288536871330512896')
+	
+	f = open('runLog.txt', 'a')
+	msg = "Symphony logged"
+	f.write(msg)
+	f.close()
+	log(msg)
+	
+	#server = symphony.get_server('288536871330512896')	#SymphonyTestServer
+	server = symphony.get_server('292040545134706699')	#SPM+
 	
 @symphony.command(enabled = False, hidden = True)
 async def pokemon(number):
 	await symphony.say(pokemonList[number]["name"])
+	
+@symphony.command(hidden = True, enabled = False)
+async def test():
+	global commandsPerMinute
+	commandsPerMinute += 1
+	await symphony.say('✿')
 
 @symphony.command(enabled = False, hidden = True)
 async def move(number):
@@ -396,6 +479,8 @@ async def move(number):
 @symphony.group(pass_context = True, description = "Ex: !sub Northgate, River Trail", aliases = ["subscribe"])
 async def sub(ctx):
 	'''Subscribe for neighborhood alerts'''
+	global commandsPerMinute
+	commandsPerMinute += 1
 	if ctx.invoked_subcommand is None:
 		outputMessage = greeting(ctx) + subscribeLogic(ctx)
 		await symphony.say(outputMessage)		
@@ -403,24 +488,41 @@ async def sub(ctx):
 @sub.command(pass_context = True, description = "Ex: !filter add Squirtle:90, Bulbasaur:95, Charmander:100")
 async def list(ctx):
 	'''List your subscriped neighborhoods'''
+	global commandsPerMinute
+	commandsPerMinute += 1
 	outputMessage = greeting(ctx) + "Your subscriptions are: " + getSubscriptions(ctx)
 	await symphony.say(outputMessage)
 
 @symphony.command(pass_context = True, description = "Ex: !Unsub Northgate, Lake City", aliases = ["unsubscribe"])
 async def unsub(ctx):
 	'''Unsubscribe from particular neighborhood alerts'''
+	global commandsPerMinute
+	commandsPerMinute += 1
 	outputMessage = greeting(ctx) + unsubscribeLogic(ctx)
 	await symphony.say(outputMessage)	
 
 @symphony.command(pass_context = True, aliases = ["subscriptions"])
 async def subs(ctx):
 	'''List your subscriped neighborhoods'''
-	outputMessage = greeting(ctx) + getSubscriptions(ctx)
-	await symphony.say(outputMessage)
+	global commandsPerMinute
+	commandsPerMinute += 1
+	
+	outputMessage = "Your subscriptions are: " + getSubscriptions(ctx)
+	
+	if len(outputMessage) <= 2000:
+		outputMessage = greeting(ctx) + outputMessage
+		await symphony.say(outputMessage)
+	else:
+		over2kMsg = greeting(ctx) + "Your subs list is over 2000 characters, sending the results as a direct message."
+		await symphony.say(over2kMsg)
+		for under2kMsg in splitMessageInto2kChunks(outputMessage):
+			await symphony.send_message(ctx.message.author, under2kMsg)
 	
 @symphony.command(pass_context = True, description = "Ex: !isLoc Ballard", aliases = ["isloc"])
 async def isLoc(ctx):
 	'''Checks if a string is a valid neighborhood name'''
+	global commandsPerMinute
+	commandsPerMinute += 1
 	if (ctx.message.content.lower() == "!isloc"):
 		outputMessage = greeting(ctx) + "Provide a neighborhood name to see if it exists, ie: `!isLoc Ballard`"
 		await symphony.say(outputMessage)
@@ -439,6 +541,8 @@ async def isLoc(ctx):
 @symphony.command(pass_context = True, description = "Ex: !areaList B", aliases = ["arealist"])
 async def areaList(ctx):
 	'''Find neighborhoods starting with a specific letter'''
+	global commandsPerMinute
+	commandsPerMinute += 1
 	input = ctx.message.content.strip()
 	
 	if (input.lower() == "!arealist" or len(input) > 11): 
@@ -450,6 +554,7 @@ async def areaList(ctx):
 	
 	
 	letter = input.replace("!areaList ", "")
+	letter = letter.replace("!arealist ", "")
 	letter = letter.lower()
 	for area in geoDataDict:
 		if area[0] == letter: 
@@ -467,6 +572,8 @@ async def areaList(ctx):
 @symphony.command(hidden = True)
 async def users():
 	'''Internal command, shows how many current users there are and lists their names'''
+	global commandsPerMinute
+	commandsPerMinute += 1
 	msg = "Current users: " + str(len(symphonyUsers))
 	
 	for user in symphonyUsers:
@@ -474,23 +581,35 @@ async def users():
 	
 	await symphony.say(msg)
 
-@symphony.command(description = "Ex: !userSubs Trapsin", enabled = False, hidden = True)
+@symphony.command(description = "Ex: !userSubs Trapsin", hidden = True)
 async def userSubs(userName: str):
 	'''Internal command, shows a user's subs'''
+	global commandsPerMinute
+	commandsPerMinute += 1
 	if (len(userName) == 0):
 		await symphony.say(self.description)
 		return
 	
+	msg = "No subs found."
+	
+	
 	for user in symphonyUsers:
 		if user.name == userName:
-			msg = " ".join(user.subscriptions)
-		break
-		
-	await symphony.say(msg)
+			if len(user.subscriptions) > 0:
+				msg = " ".join(user.subscriptions)
+			break
+	
+	if len(msg) <= 2000:
+		await symphony.say(msg)
+	else:
+		for under2kMsg in splitMessageInto2kChunks(msg):
+			await symphony.say(under2kMsg)
 
-@symphony.command(description = "Ex: !userFilters Trapsin", enabled = False, hidden = True)
+@symphony.command(description = "Ex: !userFilters Trapsin", hidden = True)
 async def userFilters(userName: str):
 	'''Internal command, shows a user's filters'''
+	global commandsPerMinute
+	commandsPerMinute += 1
 	msg = ""
 	for user in symphonyUsers:
 		if user.name == userName:
@@ -503,16 +622,21 @@ async def userFilters(userName: str):
 @symphony.group(pass_context = True)
 async def filter(ctx):
 	'''Manage custom filters for your subscriptions'''
+	global commandsPerMinute
+	commandsPerMinute += 1
 	if ctx.invoked_subcommand is None:
 		outputMessage = greeting(ctx) + '''this command has multiple uses:
 		`!filter add POKEMON:IV`» Add a Pokémon to your `!filter list`
 		`!filter remove POKEMON`»  Remove a Pokémon from your `!filter list`
+		`!filter block POKEMON`» Block a Pokémon from being messaged to you
 		`!filter list`» View your currently active filter list.'''
 		await symphony.say(outputMessage)	
 
 @filter.command(pass_context = True, description = "Ex: !filter add Squirtle:90, Bulbasaur:95, Charmander:100")
 async def add(ctx):
 	'''Add a filter'''
+	global commandsPerMinute
+	commandsPerMinute += 1
 	message = ctx.message
 	
 	# provide help if no parameters given
@@ -547,8 +671,6 @@ async def add(ctx):
 		try:
 			pokemon, ivValue = filter.split(":")
 			try:
-				print("Printing")
-				print(ivValue)
 				ivValue = int(ivValue)
 			except:
 				await symphony.say(greeting(ctx) + "IV Value must be a number, ie: !filter add Squirtle:95")
@@ -584,6 +706,9 @@ async def add(ctx):
 @filter.command(pass_context = True, description = "Ex: !filter remove Squirtle, Bulbasaur")
 async def remove(ctx):
 	'''Remove a filter'''
+	global commandsPerMinute
+	commandsPerMinute += 1
+	
 	message = ctx.message
 	
 	# provide help if no parameters given
@@ -595,7 +720,7 @@ async def remove(ctx):
 	messageSanitized = message.content.replace("!filter remove ", "")
 	filters = messageSanitized.split(',')
 	
-	print(filters)
+	#print(filters)
 	
 	notFound = []
 	noFilter = []
@@ -644,6 +769,9 @@ async def remove(ctx):
 @filter.command(pass_context = True, description = "Ex: !filter block Wartortle, Exeggcute")
 async def block(ctx):
 	'''Block a Pokémon from showing in your subscriptions'''
+	global commandsPerMinute
+	commandsPerMinute += 1
+	
 	message = ctx.message
 	
 	# provide help if no parameters given
@@ -700,13 +828,72 @@ async def block(ctx):
 	outputMessage = greeting(ctx) + outputMessage
 	await symphony.say(outputMessage)	
 
+@filter.command(pass_context = True, hidden = True)
+async def default(ctx):
+	'''Sets your default minimum IV filter for all pokemon'''
+	global commandsPerMinute
+	commandsPerMinute += 1
+	
+	message = ctx.message
+	
+	# provide help if no parameters given
+	if (message.content.strip() == "!filter default"): 
+		outputMessage = greeting(ctx) + "What minimum IV would you like to set as your default?"
+		await symphony.say(outputMessage)
+		return
+	
+	messageSanitized = message.content.replace("!filter default ", "")
+	
+	try:
+		default = int(messageSanitized)
+	except:
+		outputMessage = greeting(ctx) + "The command should be in the format `!filter default IV`"
+		await symphony.say(outputMessage)
+		return
+	
+	for user in symphonyUsers:
+		if user.id == message.author.id:
+			user.default = default
+			break
+	
+	exportUsers()
+	
+	outputMessage = greeting(ctx) + "Your default filter has been set to " + str(default)
+	await symphony.say(outputMessage)
+
+@filter.command(pass_context = True, hidden = True)
+async def clear(ctx):
+	'''Clears your filter list'''
+	global commandsPerMinute
+	commandsPerMinute += 1
+	
+	message = ctx.message
+	
+	outputMessage = "To clear your `!filter list` enter the command `!filter clear yes`. Make sure you want to do this as your list will be cleared and can't be recovered. It is recommended to run the `!filter list` command before you do this so you have it as a reference of your old list."
+	
+	if (message.content == "!filter clear yes" or message.content == "!filter clear Yes"):
+		for user in symphonyUsers:
+			if user.id == message.author.id:
+				user.filters = {}
+				outputMessage = "Your `!filter list` has been cleared."
+				break
+	
+	exportUsers()
+	
+	outputMessage = greeting(ctx) + outputMessage
+	await symphony.say(outputMessage)		
+	
 @filter.command(pass_context = True)
 async def list(ctx):
 	'''List your custom filters'''
+	global commandsPerMinute
+	commandsPerMinute += 1
+	
 	outputMessage = ""
+	default = 0
 	for user in symphonyUsers:
 		if user.id == ctx.message.author.id:
-			outputMessage = ""
+			default = user.default
 			for k, v in user.filters.items():
 				outputMessage = outputMessage + k + ":" + str(v) + ", "
 			break
@@ -714,18 +901,24 @@ async def list(ctx):
 	
 	outputMessage = outputMessage.replace("101", "Blocked")
 	outputMessage = outputMessage.strip(', ')
-	outputMessage = greeting(ctx) + "Your filter list is: " + outputMessage
+	outputMessage = greeting(ctx) + "Your default filter IV is: " + str(default) + "\n\nYour filter list is: " + outputMessage
 	await symphony.say(outputMessage)
 			
 	
 @symphony.event
 async def on_message(message):
+	global messagesPerMinute
+	global inputPerMinute
+	messagesPerMinute += 1
+	
 	# we do not want the bot to reply to itself
 	if message.author == symphony.user:
 		return
 	
 	# only accept spawn input from the input channel
 	if message.channel.id == input.id:
+		inputPerMinute += 1
+		
 		s = readInput(message.content)
 		
 		# if IV Error send input and output to troubleshooting channel and no where else
@@ -742,6 +935,28 @@ async def on_message(message):
 			await symphony.send_message(troubleshooting, message.content)
 			await symphony.send_message(troubleshooting, embed = s.message)
 		
+		if (s.move1Name == "Move not found" or s.move2Name == "Move not found"):
+			await symphony.send_message(troubleshooting, message.content)
+			await symphony.send_message(troubleshooting, embed = s.message)
+		
+		
+		subs = findSubcribedUsers(s.locationName)
+		subs = checkSubscribedUserFilters(subs, s.pokemonName, s.percent)
+		
+		for sub in subs:
+			try:
+				sendToUser = server.get_member(sub.id)
+				try:
+					log("DMing " + sub.name + " " + s.pokemonName + " " + str(s.percent))
+				except:
+					log("DMing " + sub.id + " " + s.pokemonName + " " + str(s.percent))
+				await symphony.send_message(sendToUser, embed = s.message)
+			except BaseException as e:
+				try:
+					log("Error DMing " + sub.name + ": " + str(e))
+				except:
+					log("Error DMing " + sub.id + ": " + str(e))
+											
 		# special cases
 		# 100 iv
 		if (s.ivTotal == 45): 
@@ -752,32 +967,36 @@ async def on_message(message):
 		# larvitar fam
 		if (s.pokemon_id == 246 or s.pokemon_id == 247 or s.pokemon_id == 248):
 			await symphony.send_message(larvitar, embed = s.message)
-		# rares: snorlax, lapras, blissey fam
-		if (s.pokemon_id == 143 or s.pokemon_id == 131 or s.pokemon_id == 113 or s.pokemon_id == 242):
+		if (s.pokemon_id == 131): await symphony.send_message(lapras, embed = s.message)
+		if (s.pokemon_id == 143): await symphony.send_message(snorlax, embed = s.message)
+		if (s.pokemon_id == 88 or s.pokemon_id == 89): await symphony.send_message(grimer, embed = s.message)
+		if (s.pokemon_id == 113 or s.pokemon_id == 242): await symphony.send_message(chansey, embed = s.message)
+		if (s.pokemon_id == 106 or s.pokemon_id == 107 or s.pokemon_id == 237): await symphony.send_message(hitmonchanLeeTop, embed = s.message)
+		if (s.pokemon_id == 179 or s.pokemon_id == 180): await symphony.send_message(mareep, embed = s.message)
+		if (s.pokemon_id == 201): await symphony.send_message(unown, embed = s.message)
+		# rares: snorlax, lapras, blissey fam, porygon
+		rarePokemonNumbers = [143, 131, 113, 242, 137, 233, 181, 147, 148, 149, 246, 247, 248, 201]
+		if (s.pokemon_id in rarePokemonNumbers):
+			if ((s.pokemon_id == 147 or s.pokemon_id == 148) and s.percent < 90): return
+			if ((s.pokemon_id == 246 or s.pokemon_id == 247) and s.percent < 82): return
 			await symphony.send_message(rares, embed = s.message)
 		
-		#print("Finding subbed users for " + s.locationName)
-		subs = findSubcribedUsers(s.locationName)
-		#print("Found " + str(len(subs)) + " subbed users")
-		#if len(subs) > 0:
-			#for sub in subs:
-				#print(sub.name)
-		
-		subs = checkSubscribedUserFilters(subs, s.pokemonName, s.percent)
-		
-		for sub in subs:
-			sendToUser = server.get_member(sub.id)
-			await symphony.send_message(sendToUser, embed = s.message)
-			
 	else: 
 		if message.channel.id == support.id:
 			await symphony.process_commands(message)
 		
+		if message.channel.id == testSupport.id:
+			await symphony.process_commands(message)
 
+		if message.channel.is_private == True:
+			await symphony.process_commands(message)
+			
+						
 pokemonList = loadPokemon()
 moveList = loadMoves()	
 loadGeoData()
 importUsers()
 exportTimer()
+actionsPerMinuteTimer()
 symphony.run("Mjg4NTYwMTI5MTAyNzA4NzM3.C5_mKg.G3lfXpkqnvr8ocJxnfKJ7YPO3pE")
 atexit.register(exit_handler)
