@@ -18,7 +18,9 @@ geoDataDict = {}
 symphonyUsers = []
 exportedRecently = False
 logFile = "log.txt"
-messagesPerMinute = 0
+messagesReadPerMinute = 0
+feedsSentPerMinute = 0
+directMessagesSentPerMinute = 0
 inputPerMinute = 0
 commandsPerMinute = 0
 
@@ -40,7 +42,7 @@ troubleshooting = discord.Object(id = '300686505066889216')
 
 support = discord.Object(id = '302183093140324352')
 
-input = discord.Object(id = '288563630645968896')
+input = discord.Object(id = '303772588243550240')
 troubleshooting = discord.Object(id = '300686505066889216')
 
 all = discord.Object(id = '297541247378391042')
@@ -294,19 +296,28 @@ def findSubcribedUsers(neighborhood):
 		if neighborhood in user.subscriptions: subscribedUsers.append(user)
 	return subscribedUsers
 
+def filterOutSubs(subList, pokemonName, percent):
+	subsToDM = []
+	
+	for subbedUser in subList:
+		# check if subbedUser has a filter for the pokemon
+		if pokemonName in subbedUser.filters:
+			# check if the filter is lower than pokemon IV
+			if (subbedUser.filters[pokemonName] <= percent):
+				# add to DM List
+				subsToDM.append(subbedUser)		
+		else:	# if no filter, check the default
+			if subbedUser.default <= percent:
+				subsToDM.append(subbedUser)
+			
+	return subsToDM
+
+	# deprecated
 def checkSubscribedUserFilters(subList, pokemonName, percent):
-	log("FILTERING FOR " + pokemonName + " " + str(percent))
-	subs = subList
+	subs = subList[:]
 
 	for sub in subs:
-		try: log(sub.name)
-		except: log(sub.id)
-
-		if (pokemonName in sub.filters): 
-			try: log("\t" + sub.name + " - " + str(sub.filters[pokemonName]))
-			except: log("\t" + sub.id + " - " + str(sub.filters[pokemonName]))
-
-		if (pokemonName in sub.filters and float(sub.filters[pokemonName]) > percent):
+		if (pokemonName in sub.filters and sub.filters[pokemonName] > percent):
 			try:
 				subs.remove(sub)
 			except BaseException as e:
@@ -317,7 +328,7 @@ def checkSubscribedUserFilters(subList, pokemonName, percent):
 				log("\t" + pokemonName + " - " + str(percent))
 				log("\t" + str(e))
 	
-	return subs	
+	return subs
 	
 def isNeighborhoodInternal(neighborhood):
 	neighborhood = neighborhood.strip()
@@ -434,16 +445,20 @@ def exportTimer():
 	exportedRecently = False
 	
 def actionsPerMinuteTimer():
-	global messagesPerMinute
+	global messagesReadPerMinute
 	global inputPerMinute
 	global commandsPerMinute
+	global directMessagesSentPerMinute
+	global feedsSentPerMinute
 	
-	threading.Timer(60.0, actionsPerMinuteTimer).start()
-	log("MPM: " + str(messagesPerMinute) + "\tIPM: " + str(inputPerMinute) + "\tCPM: " + str(commandsPerMinute))
+	threading.Timer(300.0, actionsPerMinuteTimer).start()
+	log("MRPM: " + str(messagesReadPerMinute / 5) + "\tIPM: " + str(inputPerMinute / 5) + "\tCPM: " + str(commandsPerMinute / 5) + "\tFPM: " + str(feedsSentPerMinute / 5) + "\tDMPM: " + str(directMessagesSentPerMinute / 5))
 	
-	messagesPerMinute = 0
+	messagesReadPerMinute = 0
 	inputPerMinute = 0
 	commandsPerMinute = 0
+	directMessagesSentPerMinute = 0
+	feedsSentPerMinute = 0
 	
 
 def splitMessageInto2kChunks(msg):
@@ -465,11 +480,76 @@ async def on_ready():
 @symphony.command(enabled = False, hidden = True)
 async def pokemon(number):
 	await symphony.say(pokemonList[number]["name"])
+
+@symphony.command(hidden = True)
+async def show(*, loc: str):
+	userList = []
 	
-@symphony.command(hidden = True, enabled = False)
+	for user in symphonyUsers:
+		if (loc in user.subscriptions):
+			userList.append(user)
+	
+	msg = str(len(userList)) + " users:"
+	
+	for u in userList:
+		msg += "\n" + u.name
+	
+	await symphony.say(msg)
+	
+@symphony.command(hidden = True, enabled = True)
 async def test():
 	global commandsPerMinute
 	commandsPerMinute += 1
+	
+	location = "firdale" 
+	pokemonName = "Togetic"
+	percent = 49
+	
+	
+	subsToHood = findSubcribedUsers(location)
+	subs = checkSubscribedUserFilters(subsToHood, pokemonName, percent)
+	try:
+		subs2 = filterOutSubs(subsToHood, pokemonName, percent)
+	except BaseException as e:
+		subs2 = []
+		log("subs2 DED")
+		log(e)
+	
+	try: print("Filter check " + location + " for: " + pokemonName + ":" + str(percent) + "\n" + str(len(subsToHood)) + "----" + str(len(subs)) + "----" + str(len(subs2)))
+	except: print("Can't msg")
+	
+	
+	for s1 in subsToHood:
+		try: 
+			try: msg = str(s1.filters[pokemonName]) + " - " + str(s1.default)
+			except: msg = "No filter" + " - " + str(s1.default)
+			log("\t" + s1.name + ": " + msg)
+		except: 
+			try: msg = str(s1.filters[pokemonName]) + " - " + str(s1.default)
+			except: msg = "No filter" + " - " + str(s1.default)
+			log("\t" + s1.id + ": " + msg)
+	print("----------------------------------")
+	for s1 in subs:
+		try: 
+			try: msg = str(s1.filters[pokemonName]) + " - " + str(s1.default)
+			except: msg = "No filter" + " - " + str(s1.default)
+			log("\t" + s1.name + ": " + msg)
+		except: 
+			try: msg = str(s1.filters[pokemonName]) + " - " + str(s1.default)
+			except: msg = "No filter" + " - " + str(s1.default)
+			log("\t" + s1.id + ": " + msg)
+	print("----------------------------------")
+	for s2 in subs2:
+		try: 
+			try: msg = str(s2.filters[pokemonName]) + " - " + str(s2.default)
+			except: msg = "No filter" + " - " + str(s2.default)
+			log("\t" + s2.name + ": " + msg)
+		except: 
+			try: msg = str(s2.filters[pokemonName]) + " - " + str(s2.default)
+			except: msg = "No filter" + " - " + str(s2.default)
+			log("\t" + s2.id + ": " + msg)
+		
+	
 	await symphony.say('✿')
 
 @symphony.command(enabled = False, hidden = True)
@@ -490,8 +570,16 @@ async def list(ctx):
 	'''List your subscriped neighborhoods'''
 	global commandsPerMinute
 	commandsPerMinute += 1
-	outputMessage = greeting(ctx) + "Your subscriptions are: " + getSubscriptions(ctx)
-	await symphony.say(outputMessage)
+	outputMessage = "Your subscriptions are: " + getSubscriptions(ctx)
+	
+	if len(outputMessage) <= 2000:
+		outputMessage = greeting(ctx) + outputMessage
+		await symphony.say(outputMessage)
+	else:
+		over2kMsg = greeting(ctx) + "Your subs list is over 2000 characters, sending the results as a direct message."
+		await symphony.say(over2kMsg)
+		for under2kMsg in splitMessageInto2kChunks(outputMessage):
+			await symphony.send_message(ctx.message.author, under2kMsg)
 
 @symphony.command(pass_context = True, description = "Ex: !Unsub Northgate, Lake City", aliases = ["unsubscribe"])
 async def unsub(ctx):
@@ -626,10 +714,11 @@ async def filter(ctx):
 	commandsPerMinute += 1
 	if ctx.invoked_subcommand is None:
 		outputMessage = greeting(ctx) + '''this command has multiple uses:
-		`!filter add POKEMON:IV`» Add a Pokémon to your `!filter list`
-		`!filter remove POKEMON`»  Remove a Pokémon from your `!filter list`
-		`!filter block POKEMON`» Block a Pokémon from being messaged to you
-		`!filter list`» View your currently active filter list.'''
+		`!filter add POKEMON:IV` » Add a Pokémon to your `!filter list`
+		`!filter remove POKEMON` »  Remove a Pokémon from your `!filter list`
+		`!filter default IV` »  Set your default minimum IV filter for all Pokémon
+		`!filter block POKEMON` » Block a Pokémon from being messaged to you
+		`!filter list` » View your currently active filter list.'''
 		await symphony.say(outputMessage)	
 
 @filter.command(pass_context = True, description = "Ex: !filter add Squirtle:90, Bulbasaur:95, Charmander:100")
@@ -814,7 +903,7 @@ async def block(ctx):
 					added.append(pokemon)
 					
 				found = True
-				curUser.filters[pokemon] = "101"
+				curUser.filters[pokemon] = 101
 				break
 		if found == False: notFound.append(pokemon)
 	
@@ -828,7 +917,7 @@ async def block(ctx):
 	outputMessage = greeting(ctx) + outputMessage
 	await symphony.say(outputMessage)	
 
-@filter.command(pass_context = True, hidden = True)
+@filter.command(pass_context = True)
 async def default(ctx):
 	'''Sets your default minimum IV filter for all pokemon'''
 	global commandsPerMinute
@@ -901,15 +990,25 @@ async def list(ctx):
 	
 	outputMessage = outputMessage.replace("101", "Blocked")
 	outputMessage = outputMessage.strip(', ')
-	outputMessage = greeting(ctx) + "Your default filter IV is: " + str(default) + "\n\nYour filter list is: " + outputMessage
-	await symphony.say(outputMessage)
+	outputMessage = "Your default filter IV is: " + str(default) + "\nYour filter list is: " + outputMessage
+	
+	if len(outputMessage) <= 2000:
+		outputMessage = greeting(ctx) + outputMessage
+		await symphony.say(outputMessage)
+	else:
+		over2kMsg = greeting(ctx) + "Your filter list is over 2000 characters, sending the results as a direct message."
+		await symphony.say(over2kMsg)
+		for under2kMsg in splitMessageInto2kChunks(outputMessage):
+			await symphony.send_message(ctx.message.author, under2kMsg)
 			
 	
 @symphony.event
 async def on_message(message):
-	global messagesPerMinute
+	global messagesReadPerMinute
 	global inputPerMinute
-	messagesPerMinute += 1
+	global feedsSentPerMinute
+	global directMessagesSentPerMinute
+	messagesReadPerMinute += 1
 	
 	# we do not want the bot to reply to itself
 	if message.author == symphony.user:
@@ -929,21 +1028,63 @@ async def on_message(message):
 		
 		# send to 'all' channel
 		await symphony.send_message(all, embed = s.message)
+		feedsSentPerMinute += 1
 		
 		# log neighborhood not found to troubleshooting channel
 		if (s.locationName == "Neighborhood not found"):
 			await symphony.send_message(troubleshooting, message.content)
 			await symphony.send_message(troubleshooting, embed = s.message)
+			feedsSentPerMinute += 1
 		
 		if (s.move1Name == "Move not found" or s.move2Name == "Move not found"):
 			await symphony.send_message(troubleshooting, message.content)
 			await symphony.send_message(troubleshooting, embed = s.message)
+			feedsSentPerMinute += 1
+		
+		subsToHood = findSubcribedUsers(s.locationName)
+		subs = checkSubscribedUserFilters(subsToHood, s.pokemonName, s.percent)
+		try:
+			subs2 = filterOutSubs(subsToHood, s.pokemonName, s.percent)
+		except:
+			log("subs2 DED")
+		
+		log("FILTERING FOR " + s.pokemonName + " " + str(s.percent) + "in " + s.locationName)
+		
+		for s1 in subsToHood:
+			try: 
+				try: msg = str(s1.filters[s.pokemonName]) + " - " + str(s1.default)
+				except: msg = "No filter" + " - " + str(s1.default)
+				log("\t" + s1.name + ": " + msg)
+			except: 
+				try: msg = str(s1.filters[s.pokemonName]) + " - " + str(s1.default)
+				except: msg = "No filter" + " - " + str(s1.default)
+				log("\t" + s1.id + ": " + msg)
+		print("----------------------------------")
+		for s1 in subs:
+			try: 
+				try: msg = str(s1.filters[s.pokemonName]) + " - " + str(s1.default)
+				except: msg = "No filter" + " - " + str(s1.default)
+				log("\t" + s1.name + ": " + msg)
+			except: 
+				try: msg = str(s1.filters[s.pokemonName]) + " - " + str(s1.default)
+				except: msg = "No filter" + " - " + str(s1.default)
+				log("\t" + s1.id + ": " + msg)
+		print("----------------------------------")
+		for s2 in subs2:
+			try: 
+				try: msg = str(s2.filters[s.pokemonName]) + " - " + str(s2.default)
+				except: msg = "No filter" + " - " + str(s2.default)
+				log("\t" + s2.name + ": " + msg)
+			except: 
+				try: msg = str(s2.filters[s.pokemonName]) + " - " + str(s2.default)
+				except: msg = "No filter" + " - " + str(s2.default)
+				log("\t" + s2.id + ": " + msg)
 		
 		
-		subs = findSubcribedUsers(s.locationName)
-		subs = checkSubscribedUserFilters(subs, s.pokemonName, s.percent)
 		
-		for sub in subs:
+		
+		
+		for sub in subs2:
 			try:
 				sendToUser = server.get_member(sub.id)
 				try:
@@ -951,6 +1092,7 @@ async def on_message(message):
 				except:
 					log("DMing " + sub.id + " " + s.pokemonName + " " + str(s.percent))
 				await symphony.send_message(sendToUser, embed = s.message)
+				directMessagesSentPerMinute += 1
 			except BaseException as e:
 				try:
 					log("Error DMing " + sub.name + ": " + str(e))
@@ -961,25 +1103,43 @@ async def on_message(message):
 		# 100 iv
 		if (s.ivTotal == 45): 
 			await symphony.send_message(perfectIV, embed = s.message)
+			feedsSentPerMinute += 1
 		# dratini fam	
 		if (s.pokemon_id == 147 or s.pokemon_id == 148 or s.pokemon_id == 149):
 			await symphony.send_message(dratini, embed = s.message)
+			feedsSentPerMinute += 1
 		# larvitar fam
 		if (s.pokemon_id == 246 or s.pokemon_id == 247 or s.pokemon_id == 248):
 			await symphony.send_message(larvitar, embed = s.message)
-		if (s.pokemon_id == 131): await symphony.send_message(lapras, embed = s.message)
-		if (s.pokemon_id == 143): await symphony.send_message(snorlax, embed = s.message)
-		if (s.pokemon_id == 88 or s.pokemon_id == 89): await symphony.send_message(grimer, embed = s.message)
-		if (s.pokemon_id == 113 or s.pokemon_id == 242): await symphony.send_message(chansey, embed = s.message)
-		if (s.pokemon_id == 106 or s.pokemon_id == 107 or s.pokemon_id == 237): await symphony.send_message(hitmonchanLeeTop, embed = s.message)
-		if (s.pokemon_id == 179 or s.pokemon_id == 180): await symphony.send_message(mareep, embed = s.message)
-		if (s.pokemon_id == 201): await symphony.send_message(unown, embed = s.message)
+			feedsSentPerMinute += 1
+		if (s.pokemon_id == 131): 
+			await symphony.send_message(lapras, embed = s.message)
+			feedsSentPerMinute += 1
+		if (s.pokemon_id == 143): 
+			await symphony.send_message(snorlax, embed = s.message)
+			feedsSentPerMinute += 1
+		if (s.pokemon_id == 88 or s.pokemon_id == 89): 
+			await symphony.send_message(grimer, embed = s.message)
+			feedsSentPerMinute += 1
+		if (s.pokemon_id == 113 or s.pokemon_id == 242): 
+			await symphony.send_message(chansey, embed = s.message)
+			feedsSentPerMinute += 1
+		if (s.pokemon_id == 106 or s.pokemon_id == 107 or s.pokemon_id == 237): 
+			await symphony.send_message(hitmonchanLeeTop, embed = s.message)
+			feedsSentPerMinute += 1
+		if (s.pokemon_id == 179 or s.pokemon_id == 180): 
+			await symphony.send_message(mareep, embed = s.message)
+			feedsSentPerMinute += 1
+		if (s.pokemon_id == 201): 
+			await symphony.send_message(unown, embed = s.message)
+			feedsSentPerMinute += 1
 		# rares: snorlax, lapras, blissey fam, porygon
 		rarePokemonNumbers = [143, 131, 113, 242, 137, 233, 181, 147, 148, 149, 246, 247, 248, 201]
 		if (s.pokemon_id in rarePokemonNumbers):
 			if ((s.pokemon_id == 147 or s.pokemon_id == 148) and s.percent < 90): return
 			if ((s.pokemon_id == 246 or s.pokemon_id == 247) and s.percent < 82): return
 			await symphony.send_message(rares, embed = s.message)
+			feedsSentPerMinute += 1
 		
 	else: 
 		if message.channel.id == support.id:
