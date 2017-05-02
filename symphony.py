@@ -1,6 +1,5 @@
 import discord
 from discord.ext.commands import Bot
-import discord.ext.commands
 import json
 import sys
 import datetime
@@ -26,33 +25,24 @@ commandsPerMinute = 0
 
 ''' 
 #test channels
-input = discord.Object(id = '288563630645968896')
 northSeattle = discord.Object(id = '288537029514362880')
 centralSeattle = discord.Object(id = '288537058127904768')
 southSeattle = discord.Object(id = '288537105645174784')
 upperEast = discord.Object(id = '288537161748447232')
 lowerEast = discord.Object(id = '288537231977873409')
-perfectIV = discord.Object(id = '288537263627829248')
-all = discord.Object(id = '297541247378391042')
-dratini = discord.Object(id = '298239380857028611')
-larvitar = discord.Object(id = '298239647929204738')
-rares = discord.Object(id = '298240115812073472') #snorlax-chancey-lapras
-troubleshooting = discord.Object(id = '300686505066889216')
 '''
 
+input = discord.Object(id = '303772588243550240')
 support = discord.Object(id = '302183093140324352')
 
-input = discord.Object(id = '303772588243550240')
 troubleshooting = discord.Object(id = '300686505066889216')
-
 all = discord.Object(id = '297541247378391042')
+testSupport = discord.Object(id = '288537462207283201')
 
-perfectIV = discord.Object(id = '288537263627829248')
+rares = discord.Object(id = '294107396442292224') #snorlax-chancey-lapras
+perfectIV = discord.Object(id = '292195941279072276')
 dratini = discord.Object(id = '292196045717241857')
 larvitar = discord.Object(id = '292196235673337856')
-rares = discord.Object(id = '294107396442292224') #snorlax-chancey-lapras
-testSupport = discord.Object(id = '288537462207283201')
-perfectIV = discord.Object(id = '292195941279072276')
 lapras = discord.Object(id = '292195992881594371')
 snorlax = discord.Object(id = '292196012511068160')
 chansey = discord.Object(id = '292196119432134657')
@@ -100,7 +90,6 @@ class Spawn:
 			p = self.ivTotal / 45
 			p = p * 100
 			self.percent = round(p, 1)
-			log("Percent calculated as " + str(self.percent))
 		except BaseException as e:
 			self.ivTotal = -1
 			log("IV Error" + str(e))
@@ -155,20 +144,34 @@ class SymphonyUser:
 		self.default = default_
 
 def exit_handler():
-	f = open('runLog.txt', 'a')
-	msg = "Closing Symphony"
-	f.write(msg)
-	f.close()
 	exportUsers()
-	log(msg)
+	log("Symphony Closing")
 
-def log(message):
+def log(message, special = "none"):
+
+	if special == "time":
+		msg = message + " at " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S:%f %p')
+		f = open("responseTime.txt", 'a')
+		print(msg, file = f)
+		f.close()
+		return
+		
 	msg = message + " at " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S %p')
 	print(msg)
 		
 	f = open(logFile, 'a')
 	print(msg, file = f)
 	f.close()
+	
+	if special == "apm":
+		f = open("apm.txt", 'a')
+		print(msg, file = f)
+		f.close()
+		
+	if special == "runLog":
+		f = open("runLog.txt", 'a')
+		print(msg, file = f)
+		f.close()
 	
 def exportUsers():
 	global exportedRecently
@@ -311,24 +314,6 @@ def filterOutSubs(subList, pokemonName, percent):
 				subsToDM.append(subbedUser)
 			
 	return subsToDM
-
-	# deprecated
-def checkSubscribedUserFilters(subList, pokemonName, percent):
-	subs = subList[:]
-
-	for sub in subs:
-		if (pokemonName in sub.filters and sub.filters[pokemonName] > percent):
-			try:
-				subs.remove(sub)
-			except BaseException as e:
-				try:
-					log("Error removing sub from DM list: " + sub.name)
-				except:
-					log("Error removing sub from DM list: " + sub.id)
-				log("\t" + pokemonName + " - " + str(percent))
-				log("\t" + str(e))
-	
-	return subs
 	
 def isNeighborhoodInternal(neighborhood):
 	neighborhood = neighborhood.strip()
@@ -443,7 +428,7 @@ def exportTimer():
 	global exportedRecently
 	threading.Timer(60.0, exportTimer).start()
 	exportedRecently = False
-	
+		
 def actionsPerMinuteTimer():
 	global messagesReadPerMinute
 	global inputPerMinute
@@ -452,7 +437,7 @@ def actionsPerMinuteTimer():
 	global feedsSentPerMinute
 	
 	threading.Timer(300.0, actionsPerMinuteTimer).start()
-	log("MRPM: " + str(messagesReadPerMinute / 5) + "\tIPM: " + str(inputPerMinute / 5) + "\tCPM: " + str(commandsPerMinute / 5) + "\tFPM: " + str(feedsSentPerMinute / 5) + "\tDMPM: " + str(directMessagesSentPerMinute / 5))
+	log("MRPM: " + str(messagesReadPerMinute / 5) + "\tIPM: " + str(inputPerMinute / 5) + "\tCPM: " + str(commandsPerMinute / 5) + "\tFPM: " + str(feedsSentPerMinute / 5) + "\tDMPM: " + str(directMessagesSentPerMinute / 5), "apm")
 	
 	messagesReadPerMinute = 0
 	inputPerMinute = 0
@@ -466,18 +451,14 @@ def splitMessageInto2kChunks(msg):
 	
 @symphony.event
 async def on_ready():
-	global server
+	global server	
 	
-	f = open('runLog.txt', 'a')
-	msg = "Symphony logged"
-	f.write(msg)
-	f.close()
-	log(msg)
+	log("Symphony started", "runLog")
 	
 	#server = symphony.get_server('288536871330512896')	#SymphonyTestServer
 	server = symphony.get_server('292040545134706699')	#SPM+
 	
-@symphony.command(enabled = False, hidden = True)
+@symphony.command(hidden = True)
 async def pokemon(number):
 	await symphony.say(pokemonList[number]["name"])
 
@@ -665,8 +646,9 @@ async def users():
 	msg = "Current users: " + str(len(symphonyUsers))
 	
 	for user in symphonyUsers:
-		msg = msg + "\n" + user.name
+		msg = msg + ", " + user.name
 	
+	msg.strip(',')
 	await symphony.say(msg)
 
 @symphony.command(description = "Ex: !userSubs Trapsin", hidden = True)
@@ -1016,6 +998,7 @@ async def on_message(message):
 	
 	# only accept spawn input from the input channel
 	if message.channel.id == input.id:
+		log("Input received   " + message.id, "time")
 		inputPerMinute += 1
 		
 		s = readInput(message.content)
@@ -1028,6 +1011,7 @@ async def on_message(message):
 		
 		# send to 'all' channel
 		await symphony.send_message(all, embed = s.message)
+		log("First feed sent  " + message.id, "time")
 		feedsSentPerMinute += 1
 		
 		# log neighborhood not found to troubleshooting channel
@@ -1042,25 +1026,15 @@ async def on_message(message):
 			feedsSentPerMinute += 1
 		
 		subsToHood = findSubcribedUsers(s.locationName)
-		subs = checkSubscribedUserFilters(subsToHood, s.pokemonName, s.percent)
 		try:
-			subs2 = filterOutSubs(subsToHood, s.pokemonName, s.percent)
+			subs = filterOutSubs(subsToHood, s.pokemonName, s.percent)
 		except:
-			log("subs2 DED")
+			log("subs DED")
 		
-		log("FILTERING FOR " + s.pokemonName + " " + str(s.percent) + "in " + s.locationName)
 		
+		''' # Logging to to help debug filter issues
+		log("FILTERING FOR " + s.pokemonName + " " + str(s.percent) + " in " + s.locationName)
 		for s1 in subsToHood:
-			try: 
-				try: msg = str(s1.filters[s.pokemonName]) + " - " + str(s1.default)
-				except: msg = "No filter" + " - " + str(s1.default)
-				log("\t" + s1.name + ": " + msg)
-			except: 
-				try: msg = str(s1.filters[s.pokemonName]) + " - " + str(s1.default)
-				except: msg = "No filter" + " - " + str(s1.default)
-				log("\t" + s1.id + ": " + msg)
-		print("----------------------------------")
-		for s1 in subs:
 			try: 
 				try: msg = str(s1.filters[s.pokemonName]) + " - " + str(s1.default)
 				except: msg = "No filter" + " - " + str(s1.default)
@@ -1079,14 +1053,17 @@ async def on_message(message):
 				try: msg = str(s2.filters[s.pokemonName]) + " - " + str(s2.default)
 				except: msg = "No filter" + " - " + str(s2.default)
 				log("\t" + s2.id + ": " + msg)
+		'''
 		
 		
 		
-		
-		
-		for sub in subs2:
+		firstDM = True
+		for sub in subs:
 			try:
 				sendToUser = server.get_member(sub.id)
+				if firstDM:
+					log("First DM sent    " + message.id, "time")
+					firstDM = False
 				try:
 					log("DMing " + sub.name + " " + s.pokemonName + " " + str(s.percent))
 				except:
@@ -1098,7 +1075,9 @@ async def on_message(message):
 					log("Error DMing " + sub.name + ": " + str(e))
 				except:
 					log("Error DMing " + sub.id + ": " + str(e))
-											
+		
+		log("All DMs sent     " + message.id, "time")
+		
 		# special cases
 		# 100 iv
 		if (s.ivTotal == 45): 
@@ -1141,16 +1120,22 @@ async def on_message(message):
 			await symphony.send_message(rares, embed = s.message)
 			feedsSentPerMinute += 1
 		
+		log("All feeds sent   " + message.id, "time")
 	else: 
 		if message.channel.id == support.id:
+			log("Command received " + message.id, "time")
 			await symphony.process_commands(message)
-		
-		if message.channel.id == testSupport.id:
-			await symphony.process_commands(message)
-
-		if message.channel.is_private == True:
-			await symphony.process_commands(message)
+			log("Command finished " + message.id, "time")
 			
+		if message.channel.id == testSupport.id:
+			log("Command received " + message.id, "time")
+			await symphony.process_commands(message)
+			log("Command finished " + message.id, "time")
+			
+		if message.channel.is_private == True:
+			log("Command received " + message.id, "time")
+			await symphony.process_commands(message)
+			log("Command finished " + message.id, "time")
 						
 pokemonList = loadPokemon()
 moveList = loadMoves()	
