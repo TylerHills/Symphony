@@ -59,9 +59,11 @@ class Spawn:
 		self.move_1 = ""
 		self.move_2 = ""
 		self.gender = ""
-		self.shiny = False
+		self.form = ""
+		
 		self.cp = 0
-				
+		self.trainerLevel = 0
+		
 		self.individual_attack = ""
 		self.individual_defense = ""
 		self.individual_stamina = ""
@@ -122,7 +124,8 @@ class Spawn:
 		
 	def buildMessage(self):		
 		title = self.pokemonName + " " + self.gender + " " + str(self.percent) + "% (" + str(self.individual_attack) + "/" + str(self.individual_defense) + "/" + str(self.individual_stamina) + ")"
-		description = self.locationName.title() + "\n" + str(self.move1Name) + ", " + str(self.move2Name) + "\n" + "Until " + self.expireTime + " (" + self.remainingTime + ")\n**→ TRAINING ACCs TO 30 ←**\nIV and MoveSets is Wrong\n→ Check **CP** feed instead"
+		description = str(self.cp) + " CP\n" + self.locationName.title() + "\n" + str(self.move1Name) + ", " + str(self.move2Name) + "\n" + "Until " + self.expireTime + " (" + 	self.remainingTime + ")"
+		
 		
 		if self.percent > 99: ivColor = discord.Color.orange()
 		elif self.percent > 90: ivColor = discord.Color.purple()
@@ -243,12 +246,19 @@ def createShape(shapeData):
 	return shape
 
 def loadGeoData():
-	SPMgeo = loadDataFromJson("GeoFence.geoJSON")
+	#northGeoJSON = loadDataFromJson("north.geoJSON")
+	#southGeoJSON = loadDataFromJson("south.geoJSON")
+	#regions = [northGeoJSON, southGeoJSON]
 	
-	for area in SPMgeo["features"]:
-		areaLabel = area["properties"]["label"]
-		shape = createShape(area)
-		geoDataDict[areaLabel.lower()] = shape
+	SPMgeo = loadDataFromJson("GeoFence.geoJSON")
+	regions = [SPMgeo]
+	
+	
+	for region in regions:
+		for area in region["features"]:
+			areaLabel = area["properties"]["label"]
+			shape = createShape(area)
+			geoDataDict[areaLabel.lower()] = shape
 
 # preps geoJSON coords to create shapely multipolygon
 # http://gis.stackexchange.com/questions/70591/creating-shapely-multipolygons-from-shapefile-multipolygons
@@ -276,7 +286,9 @@ def readInput(spawnData):
 	s.pokemon_id = sd["pokemon_id"]
 	s.move_1 = sd["move_1"]
 	s.move_2 = sd["move_2"]
-	#if (sd["shiny"] == 'true'): s.shiny = True
+	s.cp = sd["cp"]
+	s.trainerLevel = sd["player_level"]
+	s.form = sd["form"]
 	s.individual_attack = sd["individual_attack"]
 	s.individual_defense = sd["individual_defense"]
 	s.individual_stamina = sd["individual_stamina"]
@@ -1027,32 +1039,7 @@ async def on_message(message):
 			subs = filterOutSubs(subsToHood, s.pokemonName, s.percent)
 		except:
 			log("subs DED")
-		
-		
-		''' # Logging to to help debug filter issues
-		log("FILTERING FOR " + s.pokemonName + " " + str(s.percent) + " in " + s.locationName)
-		for s1 in subsToHood:
-			try: 
-				try: msg = str(s1.filters[s.pokemonName]) + " - " + str(s1.default)
-				except: msg = "No filter" + " - " + str(s1.default)
-				log("\t" + s1.name + ": " + msg)
-			except: 
-				try: msg = str(s1.filters[s.pokemonName]) + " - " + str(s1.default)
-				except: msg = "No filter" + " - " + str(s1.default)
-				log("\t" + s1.id + ": " + msg)
-		print("----------------------------------")
-		for s2 in subs2:
-			try: 
-				try: msg = str(s2.filters[s.pokemonName]) + " - " + str(s2.default)
-				except: msg = "No filter" + " - " + str(s2.default)
-				log("\t" + s2.name + ": " + msg)
-			except: 
-				try: msg = str(s2.filters[s.pokemonName]) + " - " + str(s2.default)
-				except: msg = "No filter" + " - " + str(s2.default)
-				log("\t" + s2.id + ": " + msg)
-		'''
-		
-		
+			
 		
 		firstDM = True
 		for sub in subs:
