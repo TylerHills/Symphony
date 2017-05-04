@@ -106,8 +106,8 @@ class Spawn:
 		except:
 			self.move2Name = "Move not found"
 		
-		if self.gender == 1: self.gender = '♀'
-		else: self.gender = '♂'
+		if self.gender == 1: self.gender = '\u2642'
+		else: self.gender = '\u2640'
 		
 		et = (datetime.datetime.now() + datetime.timedelta(seconds = self.seconds_until_despawn)).time()
 		self.expireTime = et.strftime('%H:%M:%S')
@@ -122,7 +122,7 @@ class Spawn:
 		
 	def buildMessage(self):		
 		title = self.pokemonName + " " + self.gender + " " + str(self.percent) + "% (" + str(self.individual_attack) + "/" + str(self.individual_defense) + "/" + str(self.individual_stamina) + ")"
-		description = self.locationName.title() + "\n" + str(self.move1Name) + ", " + str(self.move2Name) + "\n" + "Until " + self.expireTime + " (" + self.remainingTime + ")"
+		description = self.locationName.title() + "\n" + str(self.move1Name) + ", " + str(self.move2Name) + "\n" + "Until " + self.expireTime + " (" + self.remainingTime + ")\n**→ TRAINING ACCs TO 30 ←**\nIV and MoveSets is Wrong\n→ Check **CP** feed instead"
 		
 		if self.percent > 99: ivColor = discord.Color.orange()
 		elif self.percent > 90: ivColor = discord.Color.purple()
@@ -243,16 +243,12 @@ def createShape(shapeData):
 	return shape
 
 def loadGeoData():
-	northGeoJSON = loadDataFromJson("north.geoJSON")
-	southGeoJSON = loadDataFromJson("south.geoJSON")
+	SPMgeo = loadDataFromJson("GeoFence.geoJSON")
 	
-	regions = [northGeoJSON, southGeoJSON]
-	
-	for region in regions:
-		for area in region["features"]:
-			areaLabel = area["properties"]["label"]
-			shape = createShape(area)
-			geoDataDict[areaLabel.lower()] = shape
+	for area in SPMgeo["features"]:
+		areaLabel = area["properties"]["label"]
+		shape = createShape(area)
+		geoDataDict[areaLabel.lower()] = shape
 
 # preps geoJSON coords to create shapely multipolygon
 # http://gis.stackexchange.com/questions/70591/creating-shapely-multipolygons-from-shapefile-multipolygons
@@ -478,7 +474,8 @@ async def show(*, loc: str):
 	await symphony.say(msg)
 	
 @symphony.command(hidden = True, enabled = True)
-async def test():
+async def test():	
+	
 	global commandsPerMinute
 	commandsPerMinute += 1
 	
@@ -529,7 +526,7 @@ async def test():
 			try: msg = str(s2.filters[pokemonName]) + " - " + str(s2.default)
 			except: msg = "No filter" + " - " + str(s2.default)
 			log("\t" + s2.id + ": " + msg)
-		
+	
 	
 	await symphony.say('✿')
 
@@ -629,10 +626,10 @@ async def areaList(ctx):
 		if area[0] == letter: 
 			areas.append(area)
 	
-	if len(areas) == 0: outputMessage = "No neighborhoods found that start with " + letter + "."
+	if len(areas) == 0: outputMessage = "No neighborhoods found that start with **" + letter + "**."
 	else:
 		areas.sort()
-		outputMessage = "Neighborhoods that start with " + letter + ": "
+		outputMessage = "Neighborhoods that start with **" + letter + "**: "
 		outputMessage = outputMessage + ", ".join(areas).title()
 		
 	outputMessage = greeting(ctx) + outputMessage
