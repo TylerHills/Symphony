@@ -122,10 +122,12 @@ class Spawn:
 		
 		self.locationName = findNeighborhood([self.longitude, self.latitude])
 		
-	def buildMessage(self):		
-		title = self.pokemonName + " " + self.gender + " " + str(self.percent) + "% (" + str(self.individual_attack) + "/" + str(self.individual_defense) + "/" + str(self.individual_stamina) + ")"
-		description = str(self.cp) + " CP\n" + self.locationName.title() + "\n" + str(self.move1Name) + ", " + str(self.move2Name) + "\n" + "Until " + self.expireTime + " (" + 	self.remainingTime + ")"
+	def buildMessage(self):	
+		title = self.pokemonName+" "+self.gender+" | CP: "+str(self.cp)
+		description = "**IV:** "+str(self.percent)+"% ("+str(self.individual_attack)+"/"+str(self.individual_defense)+"/"+str(self.individual_stamina)+")\n**MoveSet:** "+str(self.move1Name)+"/"+str(self.move2Name)+"\n**Location:** "+self.locationName.title()+"\n**Until:** "+self.expireTime+" ("+self.remainingTime+")"
 		
+		#title = self.pokemonName + " " + self.gender + " " + str(self.percent) + "% (" + str(self.individual_attack) + "/" + str(self.individual_defense) + "/" + str(self.individual_stamina) + ")"
+		#description = str(self.cp) + " CP\n" + self.locationName.title() + "\n" + str(self.move1Name) + ", " + str(self.move2Name) + "\n" + "Until " + self.expireTime + " (" + 	self.remainingTime + ")"
 		
 		if self.percent > 99: ivColor = discord.Color.orange()
 		elif self.percent > 90: ivColor = discord.Color.purple()
@@ -487,7 +489,7 @@ async def show(*, loc: str):
 	
 @symphony.command(hidden = True, enabled = True)
 async def test():	
-	
+	# current use for investigating filter issues
 	global commandsPerMinute
 	commandsPerMinute += 1
 	
@@ -542,6 +544,13 @@ async def test():
 	
 	await symphony.say('✿')
 
+@symphony.command(aliases = ["neighborhoods"])
+async def hoods():
+	'''Provides the link for the Neighborhood map'''
+	# SPM bot handles the command, just adding so it shows up in the help list
+	#await symphony.say("For a list of Neighborhoods: http://doctypestudios.com/SPM/Neighborhoods.html")
+	return
+	
 @symphony.command(enabled = False, hidden = True)
 async def move(number):
 	await symphony.say(moveList[number]["name"])
@@ -941,7 +950,7 @@ async def default(ctx):
 	outputMessage = greeting(ctx) + "Your default filter has been set to " + str(default)
 	await symphony.say(outputMessage)
 
-@filter.command(pass_context = True, hidden = True)
+@filter.command(pass_context = True)
 async def clear(ctx):
 	'''Clears your filter list'''
 	global commandsPerMinute
