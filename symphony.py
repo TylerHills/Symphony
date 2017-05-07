@@ -23,23 +23,16 @@ directMessagesSentPerMinute = 0
 inputPerMinute = 0
 commandsPerMinute = 0
 
-''' 
-#test channels
-northSeattle = discord.Object(id = '288537029514362880')
-centralSeattle = discord.Object(id = '288537058127904768')
-southSeattle = discord.Object(id = '288537105645174784')
-upperEast = discord.Object(id = '288537161748447232')
-lowerEast = discord.Object(id = '288537231977873409')
-'''
+input = discord.Object(id = '303772588243550240')	# where the input feed is being psoted
+support = discord.Object(id = '302183093140324352')	# the only channel commands will be read from
 
-input = discord.Object(id = '303772588243550240')
-support = discord.Object(id = '302183093140324352')
-
+# test server channels
 troubleshooting = discord.Object(id = '300686505066889216')
 all = discord.Object(id = '297541247378391042')
 testSupport = discord.Object(id = '288537462207283201')
 
-rares = discord.Object(id = '294107396442292224') #snorlax-chancey-lapras
+# feeds
+rares = discord.Object(id = '294107396442292224') 	# snorlax-chancey-lapras-porygon
 perfectIV = discord.Object(id = '292195941279072276')
 dratini = discord.Object(id = '292196045717241857')
 larvitar = discord.Object(id = '292196235673337856')
@@ -50,8 +43,7 @@ grimer = discord.Object(id = '295375572639416321')
 hitmonchanLeeTop = discord.Object(id = '295400320484245504')
 mareep = discord.Object(id = '292196086456516610')
 unown = discord.Object(id = '292195967191613440')
-
-
+starters = discord.Object(id = '310199103231623168')	# gen 1 & 2
 
 class Spawn:
 	def __init__(self):
@@ -153,7 +145,14 @@ def exit_handler():
 	log("Symphony Closing")
 
 def log(message, special = "none"):
-
+	
+	if special == "bottleneck":
+		msg = message + " at " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S:%f %p')
+		f = open("bottleNeck.txt", 'a')
+		print(msg, file = f)
+		f.close()
+		return
+	
 	if special == "time":
 		msg = message + " at " + datetime.datetime.now().strftime('%m/%d/%y %I:%M:%S:%f %p')
 		f = open("responseTime.txt", 'a')
@@ -283,8 +282,11 @@ def PrepCoordsForShapely(rawcoords):
     return [preppedcoords]
 	
 def readInput(spawnData):
+	log("Spawn started\t\t\t\t\t\t\t\t", "bottleneck")
 	s = Spawn()
+	log("Loading JSON\t\t\t\t\t\t\t\t", "bottleneck")
 	sd = json.loads(spawnData)
+	log("JSON Loaded, parsing JSON\t\t\t\t\t", "bottleneck")
 	s.pokemon_id = sd["pokemon_id"]
 	s.move_1 = sd["move_1"]
 	s.move_2 = sd["move_2"]
@@ -297,10 +299,14 @@ def readInput(spawnData):
 	s.longitude = sd["longitude"]
 	s.latitude = sd["latitude"]
 	s.seconds_until_despawn = sd["seconds_until_despawn"]
+	log("JSON Parsed, calling getNames\t\t\t\t", "bottleneck")
 	s.getNames()
+	log("getNames finished, calling calcPercent\t\t", "bottleneck")
 	s.calculatePercent()
+	log("calcPercent finished, calling buildMessage\t", "bottleneck")
 	s.buildMessage()
-	
+	log("BuildMessage finished\t\t\t\t\t\t", "bottleneck")
+	log("Spawn finished\t\t\t\t\t\t", "bottleneck")
 	return s
 
 def findSubcribedUsers(neighborhood):
@@ -461,11 +467,8 @@ def splitMessageInto2kChunks(msg):
 	
 @symphony.event
 async def on_ready():
-	global server	
-	
+	global server		
 	log("Symphony started", "runLog")
-	
-	#server = symphony.get_server('288536871330512896')	#SymphonyTestServer
 	server = symphony.get_server('292040545134706699')	#SPM+
 	
 @symphony.command(hidden = True)
@@ -1071,7 +1074,7 @@ async def on_message(message):
 		
 		log("All DMs sent     " + message.id, "time")
 		
-		# special cases
+		# --------------------------feeds--------------------------
 		# 100 iv
 		if (s.ivTotal == 45): 
 			await symphony.send_message(perfectIV, embed = s.message)
@@ -1080,10 +1083,15 @@ async def on_message(message):
 		if (s.pokemon_id == 147 or s.pokemon_id == 148 or s.pokemon_id == 149):
 			await symphony.send_message(dratini, embed = s.message)
 			feedsSentPerMinute += 1
+		# gen 1 & 2 starters
+		if (s.pokemon_id >= 1 and s.pokemon_id <= 9) or (s.pokemon_id >= 152 and s.pokemon_id <= 160):
+			await symphony.send_message(starters, embed = s.message)
+			feedsSentPerMinute += 1
 		# larvitar fam
 		if (s.pokemon_id == 246 or s.pokemon_id == 247 or s.pokemon_id == 248):
 			await symphony.send_message(larvitar, embed = s.message)
 			feedsSentPerMinute += 1
+		# others
 		if (s.pokemon_id == 131): 
 			await symphony.send_message(lapras, embed = s.message)
 			feedsSentPerMinute += 1
@@ -1105,7 +1113,7 @@ async def on_message(message):
 		if (s.pokemon_id == 201): 
 			await symphony.send_message(unown, embed = s.message)
 			feedsSentPerMinute += 1
-		# rares: snorlax, lapras, blissey fam, porygon
+		# rares: snorlax, lapras, blissey fam, porygon, larvitar fam, dratini fam
 		rarePokemonNumbers = [143, 131, 113, 242, 137, 233, 181, 147, 148, 149, 246, 247, 248, 201]
 		if (s.pokemon_id in rarePokemonNumbers):
 			if ((s.pokemon_id == 147 or s.pokemon_id == 148) and s.percent < 90): return
