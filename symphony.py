@@ -23,13 +23,12 @@ directMessagesSentPerMinute = 0
 inputPerMinute = 0
 commandsPerMinute = 0
 
-input = discord.Object(id = '303772588243550240')	# where the input feed is being psoted
+input = discord.Object(id = '303772588243550240')	# where the input feed is being posted
 support = discord.Object(id = '302183093140324352')	# the only channel commands will be read from
 
 # test server channels
 troubleshooting = discord.Object(id = '300686505066889216')
 all = discord.Object(id = '297541247378391042')
-testSupport = discord.Object(id = '288537462207283201')
 
 # feeds
 rares = discord.Object(id = '294107396442292224') 	# snorlax-chancey-lapras-porygon
@@ -44,6 +43,7 @@ hitmonchanLeeTop = discord.Object(id = '295400320484245504')
 mareep = discord.Object(id = '292196086456516610')
 unown = discord.Object(id = '292195967191613440')
 starters = discord.Object(id = '310199103231623168')	# gen 1 & 2
+hugeMons = discord.Object(id = '313086330609467393')		# CP >= 2500
 
 class Spawn:
 	def __init__(self):
@@ -112,6 +112,9 @@ class Spawn:
 		
 		self.link = "http://maps.google.com/maps?q="+ str(self.latitude) + "," + str(self.longitude)
 		
+		if (self.longitude == -1 or self.latitude == -1): 
+			self.locationName = "test hood"
+			return
 		self.locationName = findNeighborhood([self.longitude, self.latitude])
 		
 	def buildMessage(self):	
@@ -132,13 +135,15 @@ class Spawn:
 		self.message.set_thumbnail(url="https://raw.githubusercontent.com/kvangent/PokeAlarm/master/icons/" + str(self.pokemon_id) +  ".png")
 
 class SymphonyUser:
-	def __init__(self, name_, id_, discriminator_, subscriptions_, filters_, default_ = 0):
+	def __init__(self, name_, id_, discriminator_, subscriptions_, filters_, default_, cpFilters_ = {}, cpDefault_ = 0):
 		self.name = name_
 		self.id = id_
 		self.discriminator = discriminator_
 		self.subscriptions = subscriptions_
 		self.filters = filters_
 		self.default = default_
+		self.cpFilters = cpFilters_
+		self.cpDefault = cpDefault_
 
 def exit_handler():
 	exportUsers()
@@ -200,7 +205,10 @@ def importUsers():
 		userData = json.load(data_file)
 	
 	for symphonyUser in userData: 
-		su = SymphonyUser(symphonyUser["name"], symphonyUser["id"], symphonyUser["discriminator"], symphonyUser["subscriptions"], symphonyUser["filters"], symphonyUser["default"])
+		try:
+			su = SymphonyUser(symphonyUser["name"], symphonyUser["id"], symphonyUser["discriminator"], symphonyUser["subscriptions"], symphonyUser["filters"], symphonyUser["default"], symphonyUser["cpFilters"], symphonyUser["cpDefault"])
+		except:
+			su = SymphonyUser(symphonyUser["name"], symphonyUser["id"], symphonyUser["discriminator"], symphonyUser["subscriptions"], symphonyUser["filters"], symphonyUser["default"], {}, 0)
 		symphonyUsers.append(su)
 		
 	log("Users Imported")
@@ -315,7 +323,7 @@ def findSubcribedUsers(neighborhood):
 		if neighborhood in user.subscriptions: subscribedUsers.append(user)
 	return subscribedUsers
 
-def filterOutSubs(subList, pokemonName, percent):
+def ivFilterOutSubs(subList, pokemonName, percent):
 	subsToDM = []
 	
 	for subbedUser in subList:
@@ -327,6 +335,22 @@ def filterOutSubs(subList, pokemonName, percent):
 				subsToDM.append(subbedUser)		
 		else:	# if no filter, check the default
 			if subbedUser.default <= percent:
+				subsToDM.append(subbedUser)
+			
+	return subsToDM
+	
+def cpFilterOutSubs(subList, pokemonName, cp):
+	subsToDM = []
+	
+	for subbedUser in subList:
+		# check if subbedUser has a filter for the pokemon
+		if pokemonName in subbedUser.cpFilters:
+			# check if the filter is lower than pokemon IV
+			if (subbedUser.cpFilters[pokemonName] <= cp):
+				# add to DM List
+				subsToDM.append(subbedUser)		
+		else:	# if no filter, check the default
+			if subbedUser.cpDefault <= cp:
 				subsToDM.append(subbedUser)
 			
 	return subsToDM
@@ -357,7 +381,7 @@ def subscribeLogic(ctx):
 			break
 	
 	if curUser == None:
-		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [], {})
+		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [], {}, 0, {}, 0)
 		symphonyUsers.append(curUser)
 	
 	# ensure all inputs are actually neighborhoods
@@ -453,7 +477,7 @@ def actionsPerMinuteTimer():
 	global feedsSentPerMinute
 	
 	threading.Timer(300.0, actionsPerMinuteTimer).start()
-	log("MRPM: " + str(messagesReadPerMinute / 5) + "\tIPM: " + str(inputPerMinute / 5) + "\tCPM: " + str(commandsPerMinute / 5) + "\tFPM: " + str(feedsSentPerMinute / 5) + "\tDMPM: " + str(directMessagesSentPerMinute / 5), "apm")
+	log("MRPM: " + str(messagesReadPerMinute / 5) + "\tCPM: " + str(commandsPerMinute / 5) + "\tIPM: " + str(inputPerMinute / 5) + "\tFPM: " + str(feedsSentPerMinute / 5) + "\tDMPM: " + str(directMessagesSentPerMinute / 5), "apm")
 	
 	messagesReadPerMinute = 0
 	inputPerMinute = 0
@@ -1002,8 +1026,243 @@ async def list(ctx):
 		over2kMsg = greeting(ctx) + "Your filter list is over 2000 characters, sending the results as a direct message."
 		await symphony.say(over2kMsg)
 		for under2kMsg in splitMessageInto2kChunks(outputMessage):
-			await symphony.send_message(ctx.message.author, under2kMsg)
-			
+			await symphony.send_message(ctx.message.author, under2kMsg)	
+
+	
+@symphony.group(pass_context = True, aliases = ["cp"])
+async def cpfilter(ctx):
+	'''Manage custom CP filters for your subscriptions'''
+	global commandsPerMinute
+	commandsPerMinute += 1
+	if ctx.invoked_subcommand is None:
+		outputMessage = greeting(ctx) + '''this command has multiple uses:
+		`!cpfilter add POKEMON:CP` » Add a Pokémon to your `!filter cp list`
+		`!cpfilter remove POKEMON` »  Remove a Pokémon from your `!filter cp list`
+		`!cpfilter default CP` »  Set your default minimum CP filter for all Pokémon
+		`!cpfilter list` » View your currently active CP filter list.'''
+		await symphony.say(outputMessage)		
+	
+@cpfilter.command(pass_context = True, description = "Ex: !cpfilter add Snorlax:2000, Bulbasaur:500, Charizard:1300")
+async def add(ctx):
+	'''Add a CP filter'''
+	global commandsPerMinute
+	commandsPerMinute += 1
+	message = ctx.message
+	
+	# provide help if no parameters given
+	if (message.content.strip().lower() == "!cpfilter add") or (message.content.strip().lower() == "!cp add"):
+		outputMessage = greeting(ctx) + "What Pokémon would you like me to add to your `!cpfilter list`"
+		await symphony.say(outputMessage)
+		return
+	
+	if (':' in message.content) == False:
+		outputMessage = greeting(ctx) + "To add to your `!cpfilter list` use the format `!cpfilter add POKEMON:CP`"
+		await symphony.say(outputMessage)
+		return
+	
+	messageSanitized = message.content.replace("!cpfilter add ", "")
+	messageSanitized = messageSanitized.replace("!cp add ", "")
+	filters = messageSanitized.split(',')
+	
+	notFound = []
+	changed = []
+	added = []
+	curUser = None
+	
+	# assign curUser to existing or new user
+	for u in symphonyUsers:
+		if u.id == message.author.id:
+			curUser = u
+			break
+	
+	if curUser == None:
+		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [], {}, 0, {}, 0)
+		symphonyUsers.append(curUser)
+	
+	# ensure all inputs are actually pokemon
+	for filter in filters:
+		try:
+			pokemon, cpValue = filter.split(":")
+			try:
+				cpValue = int(cpValue)
+			except:
+				await symphony.say(greeting(ctx) + "CP Value must be a number, ie: !cpfilter add Squirtle:400")
+				return
+		except:
+			pokemon = filter
+		pokemon = pokemon.strip()
+		pokemon = pokemon.title()
+		
+		found = False
+		for pokemonNumber, pokemonData in pokemonList.items():
+			if pokemonData["name"] == pokemon:
+				if pokemon in curUser.cpFilters:
+					changed.append(filter)
+				else:
+					added.append(filter)
+				
+				found = True
+				curUser.cpFilters[pokemon] = cpValue
+				break
+				
+		if found == False: notFound.append(pokemon)
+	
+	outputMessage = ""
+	if len(added) > 0: outputMessage = outputMessage + "Added CP filters for: " + ", ".join(added).title() + "\n"
+	if len(changed) > 0: outputMessage = outputMessage + "CP filters updated for: " + ", ".join(changed).title() + "\n"
+	if len(notFound) > 0: outputMessage = outputMessage + "Could not find a pokemon for: " + ", ".join(notFound).title() + "\n"
+	
+	exportUsers()
+	outputMessage = greeting(ctx) + outputMessage
+	await symphony.say(outputMessage)	
+
+@cpfilter.command(pass_context = True, description = "Ex: !cpfilter remove Squirtle, Bulbasaur")
+async def remove(ctx):
+	'''Remove a cp filter'''
+	global commandsPerMinute
+	commandsPerMinute += 1
+	
+	message = ctx.message
+	
+	# provide help if no parameters given
+	if (message.content.strip().lower() == "!cpfilter remove") or (message.content.strip().lower() == "!cp remove"):
+		outputMessage = greeting(ctx) + "What Pokémon would you like me to remove from your `!cpfilter list`"
+		await symphony.say(outputMessage)
+		return
+		
+	messageSanitized = message.content.replace("!cpfilter remove ", "")
+	messageSanitized = messageSanitized.replace("!cp remove ", "")
+	filters = messageSanitized.split(',')
+	
+	#print(filters)
+	
+	notFound = []
+	noFilter = []
+	removed = []
+	curUser = None
+	
+	# assign curUser to existing or new user
+	for u in symphonyUsers:
+		if u.id == message.author.id:
+			curUser = u
+			break
+	
+	if curUser == None:
+		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [], {}, 0, {}, 0)
+		symphonyUsers.append(curUser)
+	
+	# ensure all inputs are actually pokemon
+	for pokemon in filters:
+		pokemon = pokemon.strip()
+		pokemon = pokemon.title()
+
+		found = False
+		for pokemonNumber, pokemonData in pokemonList.items():
+			if pokemonData["name"] == pokemon:
+				if pokemon in curUser.cpFilters:
+					removed.append(pokemon)
+					curUser.cpFilters.pop(pokemon)
+				else:
+					noFilter.append(pokemon)
+				
+				found = True
+				break
+		
+		if found == False: notFound.append(pokemon)
+	
+	outputMessage = ""
+	if len(removed) > 0: outputMessage = outputMessage + "Removed CP filters for: " + ", ".join(removed).title() + "\n"
+	if len(noFilter) > 0: outputMessage = outputMessage + "No CP filter exists for: " + ", ".join(noFilter).title() + "\n"
+	if len(notFound) > 0: outputMessage = outputMessage + "Could not find a pokemon for: " + ", ".join(notFound).title() + "\n"
+	
+	exportUsers()
+	
+	outputMessage = greeting(ctx) + outputMessage
+	await symphony.say(outputMessage)		
+
+@cpfilter.command(pass_context = True)
+async def clear(ctx):
+	'''Clears your filter list'''
+	global commandsPerMinute
+	commandsPerMinute += 1
+	
+	message = ctx.message
+	
+	outputMessage = "To clear your `!cpfilter list` enter the command `!cpfilter clear yes`. Make sure you want to do this as your list will be cleared and can't be recovered. It is recommended to run the `!cpfilter list` command before you do this so you have it as a reference of your old list."
+	
+	if (message.content.lower() == "!cpfilter clear yes"):
+		for user in symphonyUsers:
+			if user.id == message.author.id:
+				user.cpfilters = {}
+				outputMessage = "Your `!cpfilter list` has been cleared."
+				break
+	
+	exportUsers()
+	
+	outputMessage = greeting(ctx) + outputMessage
+	await symphony.say(outputMessage)		
+
+@cpfilter.command(pass_context = True)
+async def default(ctx):
+	'''Sets your default minimum CP filter for all pokemon'''
+	global commandsPerMinute
+	commandsPerMinute += 1
+	
+	message = ctx.message
+	
+	# provide help if no parameters given
+	if (message.content.strip() == "!cpfilter default") or (message.content.strip() == "!cp default"): 
+		outputMessage = greeting(ctx) + "What minimum CP would you like to set as your default?"
+		await symphony.say(outputMessage)
+		return
+	
+	messageSanitized = message.content.replace("!cpfilter default ", "")
+	messageSanitized = messageSanitized.replace("!cp default ", "")
+	
+	try:
+		cpDefault = int(messageSanitized)
+	except:
+		outputMessage = greeting(ctx) + "The command should be in the format `!cpfilter default CP`"
+		await symphony.say(outputMessage)
+		return
+	
+	for user in symphonyUsers:
+		if user.id == message.author.id:
+			user.cpDefault = cpDefault
+			break
+	
+	exportUsers()
+	
+	outputMessage = greeting(ctx) + "Your default CP filter has been set to " + str(cpDefault)
+	await symphony.say(outputMessage)
+	
+@cpfilter.command(pass_context = True)
+async def list(ctx):
+	'''List your custom CP filters'''
+	global commandsPerMinute
+	commandsPerMinute += 1
+	
+	outputMessage = ""
+	cpDefault = 0
+	for user in symphonyUsers:
+		if user.id == ctx.message.author.id:
+			cpDefault = user.cpDefault
+			for k, v in user.cpFilters.items():
+				outputMessage = outputMessage + k + ":" + str(v) + ", "
+			break
+	if len(outputMessage) == 0: outputMessage = "No CP filters found."
+	
+	outputMessage = outputMessage.strip(', ')
+	outputMessage = "Your default CP filter is: " + str(cpDefault) + "\nYour CP filter list is: " + outputMessage
+	
+	if len(outputMessage) <= 2000:
+		outputMessage = greeting(ctx) + outputMessage
+		await symphony.say(outputMessage)
+	else:
+		over2kMsg = greeting(ctx) + "Your CP filter list is over 2000 characters, sending the results as a direct message."
+		await symphony.say(over2kMsg)
+		for under2kMsg in splitMessageInto2kChunks(outputMessage):
+			await symphony.send_message(ctx.message.author, under2kMsg)	
 	
 @symphony.event
 async def on_message(message):
@@ -1048,10 +1307,13 @@ async def on_message(message):
 		
 		subsToHood = findSubcribedUsers(s.locationName)
 		try:
-			subs = filterOutSubs(subsToHood, s.pokemonName, s.percent)
+			subs = ivFilterOutSubs(subsToHood, s.pokemonName, s.percent)
 		except:
-			log("subs DED")
-			
+			log("iv filter DED")
+		try:
+			subs = cpFilterOutSubs(subs, s.pokemonName, s.cp)
+		except:
+			log("cp filter DED")
 		
 		firstDM = True
 		for sub in subs:
@@ -1074,6 +1336,7 @@ async def on_message(message):
 		
 		log("All DMs sent     " + message.id, "time")
 		
+		'''
 		# --------------------------feeds--------------------------
 		# 100 iv
 		if (s.ivTotal == 45): 
@@ -1083,10 +1346,16 @@ async def on_message(message):
 		if (s.pokemon_id == 147 or s.pokemon_id == 148 or s.pokemon_id == 149):
 			await symphony.send_message(dratini, embed = s.message)
 			feedsSentPerMinute += 1
+		'''
 		# gen 1 & 2 starters
 		if (s.pokemon_id >= 1 and s.pokemon_id <= 9) or (s.pokemon_id >= 152 and s.pokemon_id <= 160):
 			await symphony.send_message(starters, embed = s.message)
 			feedsSentPerMinute += 1
+		# cp >= 2500
+		if (s.cp >= 2500):
+			await symphony.send_message(hugeMons, embed = s.message)
+			feedsSentPerMinute += 1
+		'''
 		# larvitar fam
 		if (s.pokemon_id == 246 or s.pokemon_id == 247 or s.pokemon_id == 248):
 			await symphony.send_message(larvitar, embed = s.message)
@@ -1122,16 +1391,12 @@ async def on_message(message):
 			feedsSentPerMinute += 1
 		
 		log("All feeds sent   " + message.id, "time")
+		'''
 	else: 
 		if message.channel.id == support.id:
 			log("Command received " + message.id, "time")
 			await symphony.process_commands(message)
-			log("Command finished " + message.id, "time")
-			
-		if message.channel.id == testSupport.id:
-			log("Command received " + message.id, "time")
-			await symphony.process_commands(message)
-			log("Command finished " + message.id, "time")
+			log("Command finished " + message.id, "time")		
 			
 		if message.channel.is_private == True:
 			log("Command received " + message.id, "time")
