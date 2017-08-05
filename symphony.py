@@ -23,7 +23,7 @@ directMessagesSentPerMinute = 0
 inputPerMinute = 0
 commandsPerMinute = 0
 
-input = discord.Object(id = '303772588243550240')	# where the input feed is being posted
+input = discord.Object(id = '288563630645968896')	# where the input feed is being posted
 support = discord.Object(id = '302183093140324352')	# the only channel commands will be read from
 
 # test server channels
@@ -87,7 +87,7 @@ class Spawn:
 		except BaseException as e:
 			self.ivTotal = -1
 			log("IV Error" + str(e))
-			
+	
 	def getNames(self):
 		self.pokemonName = pokemonList[str(self.pokemon_id)]["name"]
 		try:
@@ -120,9 +120,6 @@ class Spawn:
 	def buildMessage(self):	
 		title = self.pokemonName+" "+self.gender+" | CP: "+str(self.cp)
 		description = "**IV:** "+str(self.percent)+"% ("+str(self.individual_attack)+"/"+str(self.individual_defense)+"/"+str(self.individual_stamina)+")\n**MoveSet:** "+str(self.move1Name)+"/"+str(self.move2Name)+"\n**Location:** "+self.locationName.title()+"\n**Until:** "+self.expireTime+" ("+self.remainingTime+")"
-		
-		#title = self.pokemonName + " " + self.gender + " " + str(self.percent) + "% (" + str(self.individual_attack) + "/" + str(self.individual_defense) + "/" + str(self.individual_stamina) + ")"
-		#description = str(self.cp) + " CP\n" + self.locationName.title() + "\n" + str(self.move1Name) + ", " + str(self.move2Name) + "\n" + "Until " + self.expireTime + " (" + 	self.remainingTime + ")"
 		
 		if self.percent > 99: ivColor = discord.Color.orange()
 		elif self.percent > 90: ivColor = discord.Color.purple()
@@ -273,20 +270,20 @@ def loadGeoData():
 # http://gis.stackexchange.com/questions/70591/creating-shapely-multipolygons-from-shapefile-multipolygons
 def PrepCoordsForShapely(rawcoords):
     preppedcoords = []
-    #according to the geojson specs, a multipolygon is a list of linear rings, so we loop each
+    # according to the geojson specs, a multipolygon is a list of linear rings, so we loop each
     for eachpolygon in rawcoords:
-        #the first linear ring is the coordinates of the polygon, and shapely needs it to be a tuple
+        # the first linear ring is the coordinates of the polygon, and shapely needs it to be a tuple
         tupleofcoords = tuple(eachpolygon[0])
-        #the remaining linear rings, if any, are the coordinates of inner holes, and shapely needs these to be nested in a list
+        # the remaining linear rings, if any, are the coordinates of inner holes, and shapely needs these to be nested in a list
         if len(eachpolygon) > 1:
             listofholes = list(eachpolygon[1:])
         else:
             listofholes = []
-        #shapely defines each polygon in a multipolygon with the polygoon coordinates and the list of holes nested inside a tuple
+        # shapely defines each polygon in a multipolygon with the polygoon coordinates and the list of holes nested inside a tuple
         eachpreppedpolygon = (tupleofcoords, listofholes)
-        #so append each prepped polygon to the final multipolygon list
+        # so append each prepped polygon to the final multipolygon list
         preppedcoords.append(eachpreppedpolygon)
-    #finally, the prepped coordinates need to be nested inside a list in order to be used as a star-argument for the MultiPolygon constructor.
+    # finally, the prepped coordinates need to be nested inside a list in order to be used as a star-argument for the MultiPolygon constructor.
     return [preppedcoords]
 	
 def readInput(spawnData):
@@ -295,19 +292,20 @@ def readInput(spawnData):
 	log("Loading JSON\t\t\t\t\t\t\t\t", "bottleneck")
 	sd = json.loads(spawnData)
 	log("JSON Loaded, parsing JSON\t\t\t\t\t", "bottleneck")
-	s.pokemon_id = sd["pokemon_id"]
-	s.move_1 = sd["move_1"]
-	s.move_2 = sd["move_2"]
-	s.cp = sd["cp"]
-	s.trainerLevel = sd["player_level"]
-	s.form = sd["form"]
-	s.individual_attack = sd["individual_attack"]
-	s.individual_defense = sd["individual_defense"]
-	s.individual_stamina = sd["individual_stamina"]
-	s.longitude = sd["longitude"]
-	s.latitude = sd["latitude"]
-	s.seconds_until_despawn = sd["seconds_until_despawn"]
+	s.pokemon_id = sd.get("pokemon_id")
+	s.move_1 = sd.get("move_1")
+	s.move_2 = sd.get("move_2")
+	s.cp = sd.get("cp")
+	s.trainerLevel = sd.get("player_level")
+	s.form = sd.get("form")
+	s.individual_attack = sd.get("individual_attack")
+	s.individual_defense = sd.get("individual_defense")
+	s.individual_stamina = sd.get("individual_stamina")
+	s.longitude = sd.get("longitude")
+	s.latitude = sd.get("latitude")
+	s.seconds_until_despawn = sd.get("seconds_until_despawn")
 	log("JSON Parsed, calling getNames\t\t\t\t", "bottleneck")
+	if s.seconds_until_despawn == None: s.seconds_until_despawn = int(sd.get("disappear_time") / 1000) 	# disappear_time is in ms, / 1000 to convert to seconds
 	s.getNames()
 	log("getNames finished, calling calcPercent\t\t", "bottleneck")
 	s.calculatePercent()
@@ -513,13 +511,38 @@ async def show(*, loc: str):
 		msg += "\n" + u.name
 	
 	await symphony.say(msg)
-	
+		
 @symphony.command(hidden = True, enabled = True)
 async def test():	
-	# current use for investigating filter issues
+
 	global commandsPerMinute
 	commandsPerMinute += 1
 	
+	outputMessage = ""
+	default = 0
+	for user in symphonyUsers:
+		if user.id == "298875104010436608":
+			default = user.default
+			for k, v in user.filters.items():
+				outputMessage = outputMessage + k + ":" + str(v) + ", "
+			break
+	if len(outputMessage) == 0: outputMessage = "No filters found."
+	
+	outputMessage = outputMessage.replace("101", "Blocked")
+	outputMessage = outputMessage.strip(', ')
+	outputMessage = "Your default filter IV is: " + str(default) + "\nYour filter list is: " + outputMessage
+	
+	if len(outputMessage) <= 1960:
+		outputMessage = "HedakomKongeda, " + outputMessage
+		print(outputMessage)
+		await symphony.say(outputMessage)
+	else:
+		over2kMsg = "HedakomKongeda, " + "Your filter list is over 2000 characters, sending the results as a direct message."
+		await symphony.say(over2kMsg)
+		for under2kMsg in splitMessageInto2kChunks(outputMessage):
+			await symphony.say(under2kMsg)	
+	
+	'''
 	location = "firdale" 
 	pokemonName = "Togetic"
 	percent = 49
@@ -568,7 +591,7 @@ async def test():
 			except: msg = "No filter" + " - " + str(s2.default)
 			log("\t" + s2.id + ": " + msg)
 	
-	
+	'''
 	await symphony.say('✿')
 
 @symphony.command(aliases = ["neighborhoods"])
@@ -598,7 +621,7 @@ async def list(ctx):
 	commandsPerMinute += 1
 	outputMessage = "Your subscriptions are: " + getSubscriptions(ctx)
 	
-	if len(outputMessage) <= 2000:
+	if len(outputMessage) <= 1960:
 		outputMessage = greeting(ctx) + outputMessage
 		await symphony.say(outputMessage)
 	else:
@@ -623,7 +646,7 @@ async def subs(ctx):
 	
 	outputMessage = "Your subscriptions are: " + getSubscriptions(ctx)
 	
-	if len(outputMessage) <= 2000:
+	if len(outputMessage) <= 1960:
 		outputMessage = greeting(ctx) + outputMessage
 		await symphony.say(outputMessage)
 	else:
@@ -714,7 +737,7 @@ async def userSubs(userName: str):
 				msg = " ".join(user.subscriptions)
 			break
 	
-	if len(msg) <= 2000:
+	if len(msg) <= 1960:
 		await symphony.say(msg)
 	else:
 		for under2kMsg in splitMessageInto2kChunks(msg):
@@ -779,7 +802,7 @@ async def add(ctx):
 			break
 	
 	if curUser == None:
-		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [], {})
+		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [], {}, 0, {}, 0)
 		symphonyUsers.append(curUser)
 	
 	# ensure all inputs are actually pokemon
@@ -850,7 +873,7 @@ async def remove(ctx):
 			break
 	
 	if curUser == None:
-		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [], {})
+		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [], {}, 0, {}, 0)
 		symphonyUsers.append(curUser)
 	
 	# ensure all inputs are actually pokemon
@@ -913,7 +936,7 @@ async def block(ctx):
 			break
 	
 	if curUser == None:
-		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [], {})
+		curUser = SymphonyUser(message.author.name, message.author.id, message.author.discriminator, [], {}, 0, {}, 0)
 		symphonyUsers.append(curUser)
 	
 	# ensure all inputs are actually pokemon
@@ -1019,7 +1042,7 @@ async def list(ctx):
 	outputMessage = outputMessage.strip(', ')
 	outputMessage = "Your default filter IV is: " + str(default) + "\nYour filter list is: " + outputMessage
 	
-	if len(outputMessage) <= 2000:
+	if len(outputMessage) <= 1960:
 		outputMessage = greeting(ctx) + outputMessage
 		await symphony.say(outputMessage)
 	else:
@@ -1242,6 +1265,7 @@ async def list(ctx):
 	global commandsPerMinute
 	commandsPerMinute += 1
 	
+	
 	outputMessage = ""
 	cpDefault = 0
 	for user in symphonyUsers:
@@ -1255,7 +1279,7 @@ async def list(ctx):
 	outputMessage = outputMessage.strip(', ')
 	outputMessage = "Your default CP filter is: " + str(cpDefault) + "\nYour CP filter list is: " + outputMessage
 	
-	if len(outputMessage) <= 2000:
+	if len(outputMessage) <= 1960:
 		outputMessage = greeting(ctx) + outputMessage
 		await symphony.say(outputMessage)
 	else:
@@ -1281,7 +1305,12 @@ async def on_message(message):
 		log("Input received   " + message.id, "time")
 		inputPerMinute += 1
 		
-		s = readInput(message.content)
+		# for monocle input
+		monocleInput = message.content
+		monocleInput = monocleInput[31:len(monocleInput) - 1]
+		s = readInput(monocleInput)
+		
+		#s = readInput(message.content)
 		
 		# if IV Error send input and output to troubleshooting channel and no where else
 		if s.ivTotal == -1:
@@ -1315,6 +1344,7 @@ async def on_message(message):
 		except:
 			log("cp filter DED")
 		
+		
 		firstDM = True
 		for sub in subs:
 			try:
@@ -1336,7 +1366,7 @@ async def on_message(message):
 		
 		log("All DMs sent     " + message.id, "time")
 		
-		'''
+		
 		# --------------------------feeds--------------------------
 		# 100 iv
 		if (s.ivTotal == 45): 
@@ -1346,7 +1376,7 @@ async def on_message(message):
 		if (s.pokemon_id == 147 or s.pokemon_id == 148 or s.pokemon_id == 149):
 			await symphony.send_message(dratini, embed = s.message)
 			feedsSentPerMinute += 1
-		'''
+		
 		# gen 1 & 2 starters
 		if (s.pokemon_id >= 1 and s.pokemon_id <= 9) or (s.pokemon_id >= 152 and s.pokemon_id <= 160):
 			await symphony.send_message(starters, embed = s.message)
@@ -1355,7 +1385,13 @@ async def on_message(message):
 		if (s.cp >= 2500):
 			await symphony.send_message(hugeMons, embed = s.message)
 			feedsSentPerMinute += 1
-		'''
+		if (s.pokemon_id >= 138 and s.pokemon_id <= 142 and s.percent >= 90):
+			await symphony.send_message(discord.Object(id = '314253025680293888'), embed = s.message)
+			feedsSentPerMinute += 1
+		if (s.pokemon_id in [74, 75, 76, 95, 111, 112, 185, 213, 219, 246, 247, 248] and s.percent >= 90):
+			await symphony.send_message(discord.Object(id = '314253064758624266'), embed = s.message)
+			feedsSentPerMinute += 1
+		
 		# larvitar fam
 		if (s.pokemon_id == 246 or s.pokemon_id == 247 or s.pokemon_id == 248):
 			await symphony.send_message(larvitar, embed = s.message)
@@ -1391,7 +1427,7 @@ async def on_message(message):
 			feedsSentPerMinute += 1
 		
 		log("All feeds sent   " + message.id, "time")
-		'''
+		
 	else: 
 		if message.channel.id == support.id:
 			log("Command received " + message.id, "time")
